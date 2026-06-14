@@ -485,7 +485,10 @@ name = "rufield-adapters"
 version = "0.1.0"
 dependencies = [
  "rufield-core",
+ "rufield-fusion",
  "rufield-provenance",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

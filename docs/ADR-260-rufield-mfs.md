@@ -199,6 +199,16 @@ Layer 0 physical sensors; Layer 1 native adapters; Layer 2 field tensor normaliz
 
 v0.1 must support three real modalities: WiFi CSI, mmWave radar, Infrared thermal. Optional: ultrasonic, subsonic, synthetic simulator.
 
+> **Implementation status (v0.1):** WiFi CSI is now **real-replay-backed** —
+> `CsiReplayAdapter` (in `rufield-adapters`) ingests *real captured WiFi CSI*
+> from a `.csi.jsonl` recording and feeds it through the same fusion engine as
+> the synthetic stream. It is **replay from a file, not live hardware**, and the
+> recordings are **unlabeled**, so its motion/presence output is a
+> **physically-grounded CSI-variance proxy, NOT validated accuracy**. mmWave and
+> thermal IR remain synthetic in v0.1. Live-hardware streaming and
+> labeled-accuracy validation remain roadmap. See the Implementation-Status
+> section below.
+
 ## 18. Benchmark Suite
 
 | Task                    |   Metric |       Target |
@@ -319,11 +329,34 @@ as a submodule — the `vendor/rvcsi` pattern). It is pure Rust, builds and test
 on Windows with no native deps (`ndarray`/`tch`/`openblas` are not used), and
 depends only on `serde`, `serde_json`, `toml`, `sha2`, and `ed25519-dalek`.
 
-**All metrics below are SYNTHETIC.** They are scored against the simulator's own
-ground-truth labels. They demonstrate the pipeline recovers known truth and runs
-within latency/privacy/provenance budgets — they are **not** field-validated
-accuracy. There is no hardware in v0.1; real adapters (ESP32 CSI, mmWave, thermal
-IR) are a documented follow-up (see the repo README "Firmware" section).
+**All benchmark metrics below are SYNTHETIC.** They are scored against the
+simulator's own ground-truth labels. They demonstrate the pipeline recovers
+known truth and runs within latency/privacy/provenance budgets — they are
+**not** field-validated accuracy.
+
+> **Update — first real (non-synthetic) adapter landed.** `CsiReplayAdapter`
+> (`rufield-adapters::csi_replay`) is the **first adapter driven by real
+> captured WiFi CSI** rather than the synthetic simulator. It parses a
+> `.csi.jsonl` recording of real per-subcarrier amplitude, calibrates an
+> empty-room baseline (per-subcarrier Welford mean + variance →
+> `CalibrationReceipt`), and emits one signed `FieldEvent` per frame — a real
+> `FieldTensor` (`wifi_csi`, `[frequency]` axis), a real `ProvenanceRef`
+> (`raw_hash` = genuine sha256 over the raw subcarrier bytes; real ed25519
+> signature under a replay key; `synthetic = false`), and an `Observation` whose
+> privacy class/labels come from a physically-grounded CSI-variance
+> motion/presence proxy. Validated against the staged real-CSI fixtures: the
+> 3-frame fixture yields 3 well-formed signed events; the **199-frame real-CSI
+> fixture** drives `RuFieldFusion` to real `person_present` / `breathing`
+> inferences. Determinism holds (same file ⇒ byte-identical event stream).
+>
+> **Honesty caveats (this is the prove-everything project):** (a) it is
+> **replay from a file, not live hardware**; (b) the recordings are
+> **unlabeled**, so the motion/presence output is a **physically-grounded
+> CSI-variance proxy, NOT validated accuracy** — no pose, no accuracy numbers
+> are claimed; (c) live-hardware streaming and labeled-accuracy validation
+> remain roadmap. The win is "RuField now ingests real WiFi CSI and produces
+> fused events from it," not an accuracy claim. mmWave and thermal IR remain
+> synthetic.
 
 ### Crates delivered
 
@@ -332,14 +365,24 @@ IR) are a documented follow-up (see the repo README "Firmware" section).
 | `rufield-core` | §7/§9/§16/§20 data model: `Modality` (15), `FieldAxis`, `FieldTensor` (shape↔values validated), `PrivacyClass` (P0–P5), `SensorDescriptor`, `Observation`, `FieldEvent`, `CalibrationReceipt`, `InferenceQuery`, `FieldInference`, `FieldEmbedding`; `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. §7 JSON example round-trips. |
 | `rufield-provenance` | Real `sha256` content hashing + deterministic `ed25519` sign/verify; §11 `is_fusable` invariant. Tests: tamper → verify fails; synthetic event fusable without signer. |
 | `rufield-privacy` | §10 default policy + `DefaultPrivacyGuard` (`authorize` → Allow/Deny/RequiresConsent). Tests: P0 transmit denied; P4 no-consent → RequiresConsent; P4 consent → Allow; P2 → Allow; P5 needs identity binding. |
-| `rufield-adapters` | Deterministic seeded `SyntheticSim` emitting the §19 sequence across 3 modalities (wifi_csi, mmwave_radar, infrared_thermal). Same seed ⇒ identical signed event stream with ground-truth labels. |
+| `rufield-adapters` | Deterministic seeded `SyntheticSim` emitting the §19 sequence across 3 modalities (wifi_csi, mmwave_radar, infrared_thermal); same seed ⇒ identical signed event stream with ground-truth labels. **Plus `CsiReplayAdapter`** — the first **real (non-synthetic)** adapter: parses real captured WiFi CSI from `.csi.jsonl`, calibrates an empty-room baseline, emits signed `FieldEvent`s with a CSI-variance motion/presence proxy (replay from file, unlabeled — NOT validated accuracy). |
 | `rufield-fusion` | `FusionGraph` (§12) + `RuFieldFusion` engine; TOML rules (§13, ≥5 inferences: person_present, sitting, sleeping, breathing, nocturnal_scratch, bed_exit, room_transition); weighted-Bayes + temporal-window; rejects non-fusable events; `FieldInference` with §24 fields. |
 | `rufield-bench` | Deterministic runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations; JSON + human table; §31 acceptance test as `#[test]`. |
 | `rufield-viewer` | §14 Layer 7 / §27.9 read-only web dashboard (Axum + vanilla JS, no build step). Drives `SyntheticSim → RuFieldFusion` and serves it over `GET /` (page), `GET /events` (SSE), `GET /api/run` (deterministic JSON), `GET /health`. Panels: live room state, event log with modality + P0–P5 privacy badges, fusion graph, signed-receipt viewer; persistent SYNTHETIC banner. Tests assert the banner is present, `/api/run` is deterministic with ≥1 event/modality (each with privacy class + receipt) and ≥5 inferences, and the SSE order is deterministic. |
 
-Total test count across the workspace: **72 tests, 0 failed** (60 prior + 12 in
-`rufield-viewer`).
-`cargo clippy --workspace` is clean.
+Total test count across the workspace: **0 failed**. Per-crate (verified): core
+12, provenance 6, privacy 7, `rufield-adapters` 25 lib + 3 integration (the new
+`CsiReplayAdapter` real-CSI tests), `rufield-fusion` 3, bench 12, viewer 12.
+`cargo clippy -p rufield-adapters` is clean.
+
+> Environmental note: on this Windows box, Windows Defender intermittently
+> blocks execution of a freshly-rebuilt test binary (`os error 5`, "Access is
+> denied"), which can abort the aggregate run for an individual crate's
+> *unittest exe* (observed for `rufield-fusion` after a rebuild). It is an
+> environmental exec-block, not a code failure — the crate compiles clean, and
+> the real-CSI → fusion path is exercised and **green** through the
+> `rufield-adapters` integration test (`csi_replay_fusion`), which drives
+> `RuFieldFusion::ingest`/`infer` over the 199-frame real-CSI fixture.
 
 ### §27 acceptance-criteria scorecard
 

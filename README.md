@@ -10,12 +10,19 @@
 [![camera-free](https://img.shields.io/badge/camera--free-yes-green.svg)](#what-it-is)
 [![privacy](https://img.shields.io/badge/privacy-P0--P5-informational.svg)](#privacy--provenance)
 
-> **Honesty note up front:** the v0.1 reference stack ships **synthetic
-> adapters only**. There is no hardware in this repository. Every benchmark
-> number is produced by a deterministic simulator and is labelled
-> **SYNTHETIC** — it proves the pipeline scores correctly against known
-> ground truth; it is **not** field-validated accuracy. Real firmware
-> adapters (ESP32 CSI, mmWave, thermal IR) are a documented roadmap item.
+> **Honesty note up front:** the v0.1 benchmark numbers are produced by a
+> deterministic **synthetic** simulator and are labelled **SYNTHETIC** — they
+> prove the pipeline scores correctly against known ground truth; they are
+> **not** field-validated accuracy.
+>
+> One adapter now ingests **real** signal: [`CsiReplayAdapter`](#real-csi-replay)
+> replays **real captured WiFi CSI** from a `.csi.jsonl` recording. Be explicit
+> about what that is and is not: it is **replay from a file, not live
+> hardware**; the recordings are **unlabeled**, so its motion/presence output is
+> a **physically-grounded CSI-variance proxy, NOT validated accuracy** (no pose,
+> no accuracy numbers). The other modalities (mmWave, thermal IR) remain
+> synthetic. Live-hardware streaming and labeled-accuracy validation remain
+> documented roadmap items.
 
 ---
 
@@ -56,7 +63,7 @@ The full specification of record is
 | [`rufield-core`](crates/rufield-core) | Data model + traits: `Modality` (15), `FieldAxis`, `FieldTensor`, `PrivacyClass` (P0–P5), `FieldEvent`, `Observation`, `CalibrationReceipt`, `FieldInference`, and the `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. |
 | [`rufield-provenance`](crates/rufield-provenance) | Real `sha256` content hashing + `ed25519` sign/verify, and the §11 fusability invariant (`is_fusable`). |
 | [`rufield-privacy`](crates/rufield-privacy) | `PrivacyClass` policy + `DefaultPrivacyGuard`: P0 edge-only, network ≤ P2, P4 consent gate, P5 identity binding. |
-| [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter emitting the camera-free room-intelligence demo across 3 modalities. |
+| [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter (camera-free room-intelligence demo across 3 modalities) **plus `CsiReplayAdapter`** — the first real (non-synthetic) adapter, replaying real captured WiFi CSI from a `.csi.jsonl` recording (replay, unlabeled). |
 | [`rufield-fusion`](crates/rufield-fusion) | `FusionGraph` + `RuFieldFusion` engine with TOML rules (weighted-Bayes / temporal-window), confidence + expiry. |
 | [`rufield-bench`](crates/rufield-bench) | Deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations, and the ADR-260 §31 acceptance test. |
 | [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): drives the `SyntheticSim → RuFieldFusion` pipeline and streams the camera-free room-intelligence demo live — room state, event log with privacy badges, fusion graph, signed-receipt viewer. SYNTHETIC; not a device-management console. |
@@ -166,6 +173,50 @@ assert!(matches!(p4_no_consent, PrivacyDecision::RequiresConsent(_)));
 let p4_consent = guard.authorize(PrivacyClass::P4, Destination::Network, true, false);
 assert!(matches!(p4_consent, PrivacyDecision::Allow));
 ```
+
+### Real CSI replay
+
+`CsiReplayAdapter` is the **first adapter driven by real captured WiFi CSI**
+rather than the synthetic simulator. It reads a `.csi.jsonl` recording (one JSON
+object per line: `{"timestamp": <seconds>, "subcarriers": [<amplitude>...]}`),
+establishes an empty-room baseline via per-subcarrier Welford statistics, and
+emits a signed `FieldEvent` per frame — which feeds the same `RuFieldFusion`
+engine as the synthetic stream.
+
+```rust
+use rufield_adapters::CsiReplayAdapter;
+use rufield_core::{FieldAdapter, FusionEngine, InferenceQuery};
+use rufield_fusion::RuFieldFusion;
+
+// Real captured WiFi CSI, replayed from a recording file (not live hardware).
+let jsonl = std::fs::read_to_string("recording.csi.jsonl")?;
+let mut adapter = CsiReplayAdapter::from_jsonl(&jsonl)?;
+
+// Calibrate an empty-room baseline (per-subcarrier mean + variance).
+let receipt = adapter.calibrate("living_room")?;
+println!("calibration: {} ({})", receipt.calibration_id, receipt.data_hash);
+
+// Stream events through the fusion engine. Each event carries a REAL sha256
+// over the raw subcarrier bytes + a real ed25519 signature (replay key).
+let mut engine = RuFieldFusion::new();
+while let Some(event) = adapter.next_event()? {
+    engine.ingest(event)?;          // §11: verified receipt, not the synthetic hatch
+    for inf in engine.infer(&InferenceQuery::all())? {
+        println!("{} conf={:.2} privacy={:?}", inf.label, inf.confidence, inf.privacy_class);
+    }
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+> **Honest caveats (read these).** This is **replay from a file, not live
+> hardware**. The recording is **unlabeled**, so the `motion_proxy` /
+> `presence_proxy` labels and the `presence` / `motion_energy` / `breathing_band`
+> features are a **standard CSI-variance heuristic — a physically-grounded
+> proxy, NOT validated-accuracy detection.** No pose, no accuracy numbers are
+> claimed. The win is simply: *RuField now ingests real WiFi CSI and produces
+> fused events from it.* Over the staged 199-frame real-CSI fixture this yields
+> presence/breathing inferences from real signal; live-hardware streaming and
+> labeled-accuracy validation remain roadmap.
 
 ## User guide
 

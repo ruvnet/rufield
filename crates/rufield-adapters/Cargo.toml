@@ -12,9 +12,12 @@ categories = ["science", "simulation"]
 [dependencies]
 rufield-core = { workspace = true }
 rufield-provenance = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 rufield-provenance = { workspace = true }
+rufield-fusion = { workspace = true }
 
 [lints]
 workspace = true

@@ -9,17 +9,29 @@
 //! IR). Every event carries a real `FieldTensor`, a P2 occupancy observation,
 //! ground-truth labels, and a synthetic-signed provenance receipt.
 //!
-//! **Honesty note:** all signals are synthetic. No hardware is involved. The
-//! real-firmware adapters (ESP32 CSI, mmWave, thermal IR) are a documented
-//! follow-up — see the repository README "Firmware" section.
+//! **Honesty note:** the [`SyntheticSim`] signals are synthetic. No hardware is
+//! involved in the simulator.
+//!
+//! The crate also ships [`CsiReplayAdapter`] — the **first real (non-synthetic)
+//! adapter**: it replays *real captured WiFi CSI* from a `.csi.jsonl` recording.
+//! Real signal, but be explicit: it is **replay from file, not live hardware**,
+//! the recordings are **unlabeled**, and its motion/presence output is a
+//! **physically-grounded CSI-variance proxy, NOT validated accuracy.** Live
+//! streaming + labeled-accuracy validation remain roadmap. See the
+//! [`csi_replay`] module docs.
 
 #![doc(html_root_url = "https://docs.rs/rufield-adapters/0.1.0")]
 
+pub mod csi_replay;
 pub mod rng;
 pub mod scenario;
 pub mod signals;
 pub mod sim;
 
+pub use csi_replay::{
+    Baseline, CsiFrame, CsiReplayAdapter, CsiReplayError, DEFAULT_CALIBRATION_FRAMES,
+    MAX_SUBCARRIERS, MOTION_THRESHOLD, PRESENCE_THRESHOLD, REPLAY_SIGNER_SEED,
+};
 pub use scenario::{demo_timeline, ticks, Phase, PhaseSpan};
 pub use signals::SignalFeatures;
 pub use sim::{
