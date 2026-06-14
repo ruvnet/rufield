@@ -1,0 +1,22 @@
+[package]
+name = "rufield-fusion"
+version.workspace = true
+edition.workspace = true
+description = "RuField MFS fusion graph + engine: TOML rules, weighted-Bayes / temporal-window inference, confidence decay (ADR-260 §12/§13/§24)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "fusion", "inference", "bayes"]
+categories = ["science"]
+
+[dependencies]
+rufield-core = { workspace = true }
+rufield-provenance = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+
+[dev-dependencies]
+rufield-adapters = { workspace = true }
+
+[lints]
+workspace = true

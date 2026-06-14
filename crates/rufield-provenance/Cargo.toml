@@ -1,0 +1,23 @@
+[package]
+name = "rufield-provenance"
+version.workspace = true
+edition.workspace = true
+description = "RuField MFS provenance receipts: sha256 hashing + ed25519 sign/verify and the §11 fusability invariant"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "provenance", "ed25519", "sha256"]
+categories = ["science", "cryptography"]
+
+[dependencies]
+rufield-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

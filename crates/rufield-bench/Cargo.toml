@@ -1,0 +1,26 @@
+[package]
+name = "rufield-bench"
+version.workspace = true
+edition.workspace = true
+description = "RuField MFS deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations (ADR-260 §18/§27/§31)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "benchmark", "fusion"]
+categories = ["science"]
+
+[[bin]]
+name = "rufield-bench"
+path = "src/main.rs"
+
+[dependencies]
+rufield-core = { workspace = true }
+rufield-provenance = { workspace = true }
+rufield-privacy = { workspace = true }
+rufield-adapters = { workspace = true }
+rufield-fusion = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "rufield-core"
+version.workspace = true
+edition.workspace = true
+description = "RuField MFS v0.1 core data model: Field Event/Tensor/Privacy/Provenance types and traits (ADR-260 §7/§9/§16/§20)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+documentation = "https://docs.rs/rufield-core"
+keywords = ["sensing", "rf", "csi", "multimodal", "privacy"]
+categories = ["science"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

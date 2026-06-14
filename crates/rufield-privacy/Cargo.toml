@@ -1,0 +1,16 @@
+[package]
+name = "rufield-privacy"
+version.workspace = true
+edition.workspace = true
+description = "RuField MFS privacy policy + PrivacyGuard: P0..P5 classes, default policy, consent and identity gating (ADR-260 §10)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "privacy", "policy", "consent"]
+categories = ["science"]
+
+[dependencies]
+rufield-core = { workspace = true }
+
+[lints]
+workspace = true

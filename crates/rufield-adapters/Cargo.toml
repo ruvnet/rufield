@@ -1,0 +1,20 @@
+[package]
+name = "rufield-adapters"
+version.workspace = true
+edition.workspace = true
+description = "RuField MFS adapters: deterministic seeded SyntheticSim emitting the §19 camera-free room-intelligence demo across 3 modalities"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "simulator", "csi", "radar", "thermal"]
+categories = ["science", "simulation"]
+
+[dependencies]
+rufield-core = { workspace = true }
+rufield-provenance = { workspace = true }
+
+[dev-dependencies]
+rufield-provenance = { workspace = true }
+
+[lints]
+workspace = true

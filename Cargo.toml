@@ -1,0 +1,57 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rufield-core",
+    "crates/rufield-provenance",
+    "crates/rufield-privacy",
+    "crates/rufield-adapters",
+    "crates/rufield-fusion",
+    "crates/rufield-bench",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["rUv <ruv@ruv.net>", "RuField Contributors"]
+license = "MIT"
+repository = "https://github.com/ruvnet/rufield"
+
+[workspace.dependencies]
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Provenance: hashing + signatures
+sha2 = "0.10"
+ed25519-dalek = "2.1"
+
+# Internal crates
+rufield-core = { version = "0.1.0", path = "crates/rufield-core" }
+rufield-provenance = { version = "0.1.0", path = "crates/rufield-provenance" }
+rufield-privacy = { version = "0.1.0", path = "crates/rufield-privacy" }
+rufield-adapters = { version = "0.1.0", path = "crates/rufield-adapters" }
+rufield-fusion = { version = "0.1.0", path = "crates/rufield-fusion" }
+rufield-bench = { version = "0.1.0", path = "crates/rufield-bench" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+doc_markdown = "allow"
+too_many_arguments = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+similar_names = "allow"
+uninlined_format_args = "allow"
+
+[profile.release]
+opt-level = 3
+lto = true

@@ -1,0 +1,66 @@
+# RuField MFS fusion rules (ADR-260 §13).
+#
+# Each rule fuses recent feature observations into a room-state inference.
+# Methods:
+#   weighted_bayes   - combine per-modality feature evidence into a probability
+#   temporal_window  - look for a state transition within window_ms
+#
+# Feature keys come from the simulator's SignalFeatures, exposed per event:
+#   motion_energy, breathing_band, posture_height, transient, range_m
+#
+# `feature` selects which feature drives the rule; `threshold` is the decision
+# boundary on the fused confidence; `privacy_max` caps the inference privacy
+# class; `window_ms` (temporal rules) bounds the transition search.
+
+[rule.person_present]
+inputs = ["wifi_csi", "mmwave_radar", "infrared_thermal"]
+method = "weighted_bayes"
+feature = "presence"
+threshold = 0.40
+privacy_max = "P2"
+
+[rule.sitting]
+inputs = ["mmwave_radar", "infrared_thermal"]
+method = "weighted_bayes"
+feature = "posture_sit"     # derived: posture_height near 0.5
+threshold = 0.45
+privacy_max = "P2"
+
+[rule.sleeping]
+inputs = ["mmwave_radar", "infrared_thermal"]
+method = "weighted_bayes"
+feature = "posture_lie"     # derived: posture_height near 0.0
+threshold = 0.45
+privacy_max = "P2"
+
+[rule.breathing]
+inputs = ["wifi_csi"]
+method = "weighted_bayes"
+feature = "breathing_band"
+threshold = 0.35
+privacy_max = "P4"
+requires_consent = true
+
+[rule.nocturnal_scratch]
+inputs = ["wifi_csi", "mmwave_radar"]
+method = "weighted_bayes"
+feature = "transient"
+threshold = 0.40
+privacy_max = "P4"
+requires_consent = true
+
+[rule.bed_exit]
+inputs = ["mmwave_radar", "infrared_thermal"]
+method = "temporal_window"
+feature = "posture_rise"    # derived: lying -> upright transition
+threshold = 0.35
+privacy_max = "P2"
+window_ms = 1500
+
+[rule.room_transition]
+inputs = ["mmwave_radar", "wifi_csi"]
+method = "temporal_window"
+feature = "range_depart"    # derived: range increasing toward exit
+threshold = 0.30
+privacy_max = "P2"
+window_ms = 2000
