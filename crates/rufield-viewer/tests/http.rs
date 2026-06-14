@@ -7,7 +7,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
-use rufield_viewer::{app, ViewerConfig};
+use rufield_viewer::{app, app_no_ingest, SourceMode, ViewerConfig};
 use tower::ServiceExt;
 
 async fn get(path: &str) -> (StatusCode, String) {
@@ -19,6 +19,26 @@ async fn get(path: &str) -> (StatusCode, String) {
     let status = resp.status();
     let bytes = resp.into_body().collect().await.unwrap().to_bytes();
     (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+/// One-shot GET against an arbitrary router (used for live-mode configs).
+async fn get_on(router: axum::Router, path: &str) -> (StatusCode, String) {
+    let resp = router
+        .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = resp.status();
+    let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+    (status, String::from_utf8_lossy(&bytes).to_string())
+}
+
+const UPSTREAM: &str = "http://127.0.0.1:8080";
+
+fn live_config() -> ViewerConfig {
+    ViewerConfig {
+        source: SourceMode::Live { upstream: UPSTREAM.to_string() },
+        ..ViewerConfig::default()
+    }
 }
 
 #[tokio::test]
@@ -140,4 +160,79 @@ async fn events_stream_emits_meta_then_frames_in_order() {
         .unwrap();
     let bytes2 = resp2.into_body().collect().await.unwrap().to_bytes();
     assert_eq!(bytes, bytes2, "SSE stream must be deterministic for a fixed seed");
+}
+
+// ---------------------------------------------------------------------------
+// Live-ingest mode (ADR-262 P3). No real RuView upstream runs in this env, so
+// these use `app_no_ingest` to assert the config/banner contract synchronously.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn live_source_reports_live_not_synthetic() {
+    let (status, body) = get_on(app_no_ingest(live_config()), "/api/source").await;
+    assert_eq!(status, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    // Source selector reflects the upstream URL...
+    assert_eq!(v["source"], "live");
+    assert_eq!(v["upstream"], UPSTREAM);
+    // ...and the viewer must NOT claim to be synthetic while live.
+    assert_eq!(v["synthetic"], false);
+
+    // Before any upstream event is received, the honest banner is DISCONNECTED
+    // (NOT a silent fallback to SYNTHETIC).
+    assert_eq!(v["banner"]["state"], "disconnected");
+    assert_eq!(v["banner"]["upstream"], UPSTREAM);
+    let label = v["banner_label"].as_str().unwrap();
+    assert!(label.starts_with("DISCONNECTED — http://127.0.0.1:8080"), "got {label}");
+    assert!(!label.contains("SYNTHETIC"), "live mode must never show SYNTHETIC");
+}
+
+#[tokio::test]
+async fn live_health_is_not_synthetic_and_carries_upstream() {
+    let (status, body) = get_on(app_no_ingest(live_config()), "/health").await;
+    assert_eq!(status, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["status"], "ok");
+    // `synthetic` must be false in live mode — the whole honesty contract.
+    assert_eq!(v["synthetic"], false);
+    assert_eq!(v["source"], "live");
+    assert_eq!(v["upstream"], UPSTREAM);
+}
+
+#[tokio::test]
+async fn synthetic_source_still_reports_synthetic_banner() {
+    // The default (synthetic) path is unchanged: banner state == synthetic.
+    let (status, body) = get_on(app_no_ingest(ViewerConfig::default()), "/api/source").await;
+    assert_eq!(status, StatusCode::OK);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["source"], "synthetic");
+    assert_eq!(v["synthetic"], true);
+    assert_eq!(v["banner"]["state"], "synthetic");
+    assert_eq!(
+        v["banner_label"].as_str().unwrap(),
+        "SYNTHETIC — simulated sensors, no hardware"
+    );
+}
+
+#[tokio::test]
+async fn api_run_is_unavailable_in_live_mode() {
+    // `/api/run` is the deterministic synthetic run — it must NOT fabricate a
+    // synthetic run when the viewer is in live mode.
+    let (status, body) = get_on(app_no_ingest(live_config()), "/api/run").await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(v["error"], "not_available_in_live_mode");
+    assert_eq!(v["upstream"], UPSTREAM);
+}
+
+#[tokio::test]
+async fn index_html_default_banner_is_synthetic_and_switchable() {
+    // The served HTML still carries the SYNTHETIC banner text by default (the
+    // existing honesty assertion) AND a switchable data-state the JS rewrites.
+    let (status, body) = get("/").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("SYNTHETIC — simulated sensors, no hardware"));
+    assert!(body.contains(r#"id="source-banner""#));
+    assert!(body.contains(r#"data-state="synthetic""#));
 }

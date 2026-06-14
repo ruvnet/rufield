@@ -66,7 +66,7 @@ The full specification of record is
 | [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter (camera-free room-intelligence demo across 3 modalities) **plus `CsiReplayAdapter`** — the first real (non-synthetic) adapter, replaying real captured WiFi CSI from a `.csi.jsonl` recording (replay, unlabeled). |
 | [`rufield-fusion`](crates/rufield-fusion) | `FusionGraph` + `RuFieldFusion` engine with TOML rules (weighted-Bayes / temporal-window), confidence + expiry. |
 | [`rufield-bench`](crates/rufield-bench) | Deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations, and the ADR-260 §31 acceptance test. |
-| [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): drives the `SyntheticSim → RuFieldFusion` pipeline and streams the camera-free room-intelligence demo live — room state, event log with privacy badges, fusion graph, signed-receipt viewer. SYNTHETIC; not a device-management console. |
+| [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): room state, event log with privacy badges, fusion graph, signed-receipt viewer. **Two sources** — `--source synthetic` (default) replays `SyntheticSim → RuFieldFusion`; `--source live --upstream <URL>` ingests **real** `FieldEvent`s from a RuField upstream (RuView `/ws/field` / `/api/field`, ADR-262 P3), verifying each receipt on ingest. Honest, mutually-exclusive `SYNTHETIC` / `LIVE` / `DISCONNECTED` banner. Not a device-management console. |
 
 ## Install / Quickstart
 
@@ -107,13 +107,48 @@ by tick, showing:
   (`sha256` hashes + ed25519 signer + verified ✓/✗).
 
 Endpoints: `GET /` (page), `GET /events` (Server-Sent Events stream),
-`GET /api/run` (full deterministic run as JSON), `GET /health`.
+`GET /api/run` (full deterministic run as JSON), `GET /api/source` (the
+data-source selector + banner state), `GET /health`.
 
-> **Honesty note:** the viewer is a **read-only SYNTHETIC demo** — it replays a
-> deterministic simulator. There is **no hardware, no live camera, and no real
-> devices**. A persistent `SYNTHETIC — simulated sensors, no hardware` banner is
-> always visible. It is *not* a fleet/device-management console; real-adapter
-> device management is a separate later milestone.
+### Live mode — consume a real RuField feed (ADR-262 P3)
+
+The same dashboard can display **real** `FieldEvent`s streamed from an external
+upstream (RuView's `wifi-densepose-sensing-server`, which exposes `GET /api/field`
+and `GET /ws/field` per ADR-262 P3) instead of the built-in synthetic simulator:
+
+```bash
+# Default: SYNTHETIC (simulator replay)
+cargo run -p rufield-viewer -- --source synthetic
+
+# LIVE: ingest a real RuField upstream
+cargo run -p rufield-viewer -- --source live --upstream http://127.0.0.1:8080
+```
+
+Env equivalents: `RUFIELD_VIEWER_SOURCE` (`synthetic`|`live`),
+`RUFIELD_VIEWER_UPSTREAM`, `RUFIELD_VIEWER_POLL_MS`. **The default stays
+SYNTHETIC.**
+
+In live mode the viewer subscribes to the upstream's `/ws/field` SSE stream
+(falling back to polling `/api/field`), **verifies each event's provenance
+receipt on ingest** (`rufield_provenance::is_fusable`), and runs the verified
+events through the *same* fusion/inference display path. The dashboard panels
+(room state / privacy badges / fusion graph / receipt modal) are identical — only
+the data source changes. Each event shows a per-event verified ✓/✗ badge;
+**unverified (forged/tampered) events are flagged and never fused into trusted
+inferences.**
+
+> **Banner honesty (non-negotiable):** the banner reflects *exactly* what is being
+> shown, and the three states are mutually exclusive and visually distinct:
+>
+> - **`SYNTHETIC — simulated sensors, no hardware`** (amber) — synthetic mode.
+> - **`LIVE — <upstream>`** (green) — live mode, actually receiving
+>   receipt-verified upstream events.
+> - **`DISCONNECTED — <upstream> unreachable`** (red) — live mode selected but the
+>   upstream cannot be reached. The viewer shows this explicitly and **never**
+>   falls back to synthetic data under a LIVE banner (or vice versa).
+>
+> Synthetic mode is still a **read-only demo** — no hardware, no live camera, no
+> real devices, not a fleet/device-management console.
 
 To depend on the crates from your own project (once published / vendored):
 

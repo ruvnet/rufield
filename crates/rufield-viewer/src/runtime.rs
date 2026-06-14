@@ -58,7 +58,10 @@ pub struct ReceiptView {
 }
 
 impl ReceiptView {
-    fn from_event(ev: &FieldEvent) -> Self {
+    /// Build a receipt view from an event, computing the verified ✓/✗ and
+    /// §11-fusable flags. Shared by the synthetic and live-ingest paths.
+    #[must_use]
+    pub fn from_event(ev: &FieldEvent) -> Self {
         ReceiptView {
             raw_hash: ev.provenance.raw_hash.clone(),
             firmware_hash: ev.provenance.firmware_hash.clone(),

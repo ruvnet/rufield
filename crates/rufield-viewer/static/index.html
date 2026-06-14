@@ -25,13 +25,26 @@
       margin: 0; background: var(--bg); color: var(--text);
       font: 14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
-    /* SYNTHETIC banner — persistent, unmissable */
-    #synthetic-banner {
+    /* Source banner — persistent, unmissable. Style switches by data-state so
+       SYNTHETIC / LIVE / DISCONNECTED can NEVER be visually confused. */
+    #source-banner {
       position: sticky; top: 0; z-index: 50;
-      background: repeating-linear-gradient(45deg, #3a2a00, #3a2a00 12px, #2e2200 12px, #2e2200 24px);
-      color: #ffd874; border-bottom: 2px solid var(--warn);
       padding: 8px 16px; font-weight: 700; letter-spacing: .3px;
       text-align: center; text-transform: uppercase; font-size: 13px;
+      border-bottom: 2px solid var(--warn);
+    }
+    /* SYNTHETIC: amber hazard stripes. */
+    #source-banner[data-state="synthetic"] {
+      background: repeating-linear-gradient(45deg, #3a2a00, #3a2a00 12px, #2e2200 12px, #2e2200 24px);
+      color: #ffd874; border-bottom-color: var(--warn);
+    }
+    /* LIVE: solid green — real, receipt-verified upstream events. */
+    #source-banner[data-state="live"] {
+      background: #0c2e16; color: #6fe08a; border-bottom-color: var(--good);
+    }
+    /* DISCONNECTED: solid red — live mode, upstream unreachable (NOT synthetic). */
+    #source-banner[data-state="disconnected"] {
+      background: #3a0d0d; color: #ff9b94; border-bottom-color: var(--bad);
     }
     header {
       padding: 16px 20px 10px; border-bottom: 1px solid var(--border);
@@ -144,7 +157,9 @@
   </style>
 </head>
 <body>
-  <div id="synthetic-banner">⚠ SYNTHETIC — simulated sensors, no hardware. Every signal below is a deterministic simulator replay, not a live sensor.</div>
+  <!-- Default state is SYNTHETIC; app.js rewrites this from /api/source on load
+       (LIVE / DISCONNECTED) so the banner always matches the data being shown. -->
+  <div id="source-banner" data-state="synthetic">⚠ SYNTHETIC — simulated sensors, no hardware. Every signal below is a deterministic simulator replay, not a live sensor.</div>
 
   <header>
     <h1>RuField MFS — Camera-Free Room Intelligence</h1>

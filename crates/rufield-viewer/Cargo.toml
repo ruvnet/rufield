@@ -23,9 +23,13 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 axum = "0.7"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
-tokio-stream = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 futures-core = "0.3"
+
+# Live-ingest HTTP client (ADR-262 P3): rustls only — no system OpenSSL.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+futures-util = "0.3"
 
 [dev-dependencies]
 tower = "0.5"

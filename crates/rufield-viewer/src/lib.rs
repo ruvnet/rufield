@@ -39,10 +39,16 @@
 
 #![doc(html_root_url = "https://docs.rs/rufield-viewer/0.1.0")]
 
+pub mod live;
 pub mod runtime;
 pub mod server;
+pub mod source;
 
+pub use live::{frame_from_api_payload, frame_from_events, frame_from_ws_event, ApiFieldPayload, LiveFrame};
 pub use runtime::{
     build_run, EventView, InferenceView, PrivacyBadge, ReceiptView, RunData, TickFrame,
 };
-pub use server::{app, ViewerConfig, DEFAULT_SEED, DEFAULT_TICK_MS};
+pub use server::{app, app_no_ingest, AppState, ViewerConfig, DEFAULT_SEED, DEFAULT_TICK_MS};
+pub use source::{
+    banner_for, BannerState, LiveState, SourceMode, DEFAULT_POLL_MS,
+};
