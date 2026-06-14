@@ -335,8 +335,10 @@ IR) are a documented follow-up (see the repo README "Firmware" section).
 | `rufield-adapters` | Deterministic seeded `SyntheticSim` emitting the §19 sequence across 3 modalities (wifi_csi, mmwave_radar, infrared_thermal). Same seed ⇒ identical signed event stream with ground-truth labels. |
 | `rufield-fusion` | `FusionGraph` (§12) + `RuFieldFusion` engine; TOML rules (§13, ≥5 inferences: person_present, sitting, sleeping, breathing, nocturnal_scratch, bed_exit, room_transition); weighted-Bayes + temporal-window; rejects non-fusable events; `FieldInference` with §24 fields. |
 | `rufield-bench` | Deterministic runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations; JSON + human table; §31 acceptance test as `#[test]`. |
+| `rufield-viewer` | §14 Layer 7 / §27.9 read-only web dashboard (Axum + vanilla JS, no build step). Drives `SyntheticSim → RuFieldFusion` and serves it over `GET /` (page), `GET /events` (SSE), `GET /api/run` (deterministic JSON), `GET /health`. Panels: live room state, event log with modality + P0–P5 privacy badges, fusion graph, signed-receipt viewer; persistent SYNTHETIC banner. Tests assert the banner is present, `/api/run` is deterministic with ≥1 event/modality (each with privacy class + receipt) and ≥5 inferences, and the SSE order is deterministic. |
 
-Total test count across the workspace: **60 tests, 0 failed**.
+Total test count across the workspace: **72 tests, 0 failed** (60 prior + 12 in
+`rufield-viewer`).
 `cargo clippy --workspace` is clean.
 
 ### §27 acceptance-criteria scorecard
@@ -351,12 +353,17 @@ Total test count across the workspace: **60 tests, 0 failed**.
 | 6 | Benchmark runner produces deterministic reports | **PASS** — identical report across runs (latency is the only wall-clock field) |
 | 7 | Raw waveform storage disabled by default | **PASS** — P0 network transmission denied by default policy |
 | 8 | P4 inference requires consent policy approval | **PASS** — P4 without consent → RequiresConsent; breathing/scratch rules carry `requires_consent = true` |
-| 9 | Dashboard shows live camera-free room intelligence | **DEFERRED** — no `rufield-viewer` dashboard in v0.1; the benchmark + `room_intelligence` example provide a CLI view. Follow-up. |
+| 9 | Dashboard shows live camera-free room intelligence | **PASS** — `rufield-viewer` (Axum + vanilla JS, no build step) drives the `SyntheticSim → RuFieldFusion` pipeline and streams it to a single-page dashboard over SSE (`/events`) + JSON (`/api/run`): live room state, event log with modality + privacy-class (P0–P5) badges, fusion graph (supporting/contradicting edges), and a signed provenance-receipt viewer. It is a **read-only SYNTHETIC viewer** (persistent `SYNTHETIC — simulated sensors, no hardware` banner), **not** a device-management console; fleet/real-adapter device management is a separate later milestone. |
 | 10 | Spec readable for external implementers | **PASS** — ADR-260 + detailed standalone README with compiling usage examples |
 
-**Decision:** §27 criteria 1–8 and 10 PASS; criterion 9 (live dashboard) is
-**deferred** to a follow-up. Per the acceptance rule (1–8, 10 pass; 9 may be
-deferred), Status is set to **Accepted — v0.1 reference stack**.
+**Decision:** all §27 criteria 1–10 now PASS. Criterion 9 (live dashboard) was
+previously deferred; it is satisfied by `rufield-viewer`, a read-only SYNTHETIC
+dashboard that streams the §19 camera-free room-intelligence demo (room state +
+privacy-class badges + fusion graph + signed-receipt viewer) over SSE/JSON.
+Status remains **Accepted — v0.1 reference stack** (now with the dashboard
+criterion met). Note the viewer is a demo viewer, not a device-management
+console — there are no real devices in v0.1; fleet/real-adapter management is a
+separate later milestone.
 
 ### Deterministic benchmark report (SYNTHETIC, seed = 2026)
 

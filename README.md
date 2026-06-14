@@ -59,6 +59,7 @@ The full specification of record is
 | [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter emitting the camera-free room-intelligence demo across 3 modalities. |
 | [`rufield-fusion`](crates/rufield-fusion) | `FusionGraph` + `RuFieldFusion` engine with TOML rules (weighted-Bayes / temporal-window), confidence + expiry. |
 | [`rufield-bench`](crates/rufield-bench) | Deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations, and the ADR-260 §31 acceptance test. |
+| [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): drives the `SyntheticSim → RuFieldFusion` pipeline and streams the camera-free room-intelligence demo live — room state, event log with privacy badges, fusion graph, signed-receipt viewer. SYNTHETIC; not a device-management console. |
 
 ## Install / Quickstart
 
@@ -72,6 +73,40 @@ cargo run -p rufield-bench            # default seed
 cargo run -p rufield-bench -- 2026    # custom seed
 cargo run -p rufield-bench -- 2026 --json   # JSON only
 ```
+
+## Dashboard / demo
+
+To *watch* the camera-free room-intelligence demo (ADR-260 §19) instead of
+reading benchmark numbers, run the read-only web viewer:
+
+```bash
+cargo run -p rufield-viewer            # serves http://127.0.0.1:8088/
+cargo run -p rufield-viewer -- --port 9090 --seed 7 --tick-ms 200
+```
+
+Then open **http://localhost:8088/**. The dashboard drives the same
+`SyntheticSim → RuFieldFusion` pipeline the benchmark uses and replays it tick
+by tick, showing:
+
+- **Live room state** — fused inferences (`person_present`, `sitting`,
+  `sleeping`, `breathing`, `bed_exit`, …) with confidence, updating as the
+  enter → sit → breathe → sleep → scratch → bed-exit → leave sequence plays.
+- **Event stream** — every `FieldEvent` tagged with its modality
+  (`wifi_csi` / `mmwave_radar` / `infrared_thermal`) and a colour-coded
+  **privacy-class badge (P0–P5)**.
+- **Fusion graph** — the supporting / contradicting events feeding each
+  inference (ADR-260 §12).
+- **Provenance receipts** — click an event to inspect its signed receipt
+  (`sha256` hashes + ed25519 signer + verified ✓/✗).
+
+Endpoints: `GET /` (page), `GET /events` (Server-Sent Events stream),
+`GET /api/run` (full deterministic run as JSON), `GET /health`.
+
+> **Honesty note:** the viewer is a **read-only SYNTHETIC demo** — it replays a
+> deterministic simulator. There is **no hardware, no live camera, and no real
+> devices**. A persistent `SYNTHETIC — simulated sensors, no hardware` banner is
+> always visible. It is *not* a fleet/device-management console; real-adapter
+> device management is a separate later milestone.
 
 To depend on the crates from your own project (once published / vendored):
 

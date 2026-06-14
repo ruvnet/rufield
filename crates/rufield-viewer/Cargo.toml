@@ -1,0 +1,35 @@
+[package]
+name = "rufield-viewer"
+version.workspace = true
+edition.workspace = true
+description = "RuField MFS read-only web dashboard: drives the SyntheticSim → fusion pipeline and streams live camera-free room intelligence (ADR-260 §14 Layer 7 / §27.9)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "dashboard", "fusion", "axum"]
+categories = ["science", "web-programming"]
+
+[[bin]]
+name = "rufield-viewer"
+path = "src/main.rs"
+
+[dependencies]
+rufield-core = { workspace = true }
+rufield-provenance = { workspace = true }
+rufield-privacy = { workspace = true }
+rufield-adapters = { workspace = true }
+rufield-fusion = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal"] }
+tokio-stream = "0.1"
+futures-core = "0.3"
+
+[dev-dependencies]
+tower = "0.5"
+http-body-util = "0.1"
+
+[lints]
+workspace = true

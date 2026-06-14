@@ -7,6 +7,7 @@ members = [
     "crates/rufield-adapters",
     "crates/rufield-fusion",
     "crates/rufield-bench",
+    "crates/rufield-viewer",
 ]
 
 [workspace.package]
@@ -33,6 +34,7 @@ rufield-privacy = { version = "0.1.0", path = "crates/rufield-privacy" }
 rufield-adapters = { version = "0.1.0", path = "crates/rufield-adapters" }
 rufield-fusion = { version = "0.1.0", path = "crates/rufield-fusion" }
 rufield-bench = { version = "0.1.0", path = "crates/rufield-bench" }
+rufield-viewer = { version = "0.1.0", path = "crates/rufield-viewer" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
