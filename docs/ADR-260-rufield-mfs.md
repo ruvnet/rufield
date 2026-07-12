@@ -1,6 +1,6 @@
 # ADR 260: RuField Multimodal Field Sensing Specification
 
-Status: Accepted — v0.1 reference stack
+Status: Accepted — wire v0.1 reference stack, crates v0.2
 
 Date: 2026 06 14
 
@@ -152,6 +152,11 @@ A Field Event is a timestamped observation from any ambient field sensor.
 |   13 | quantum_inertial     | atom interferometer or precision IMU    |
 |   14 | event_camera         | optional visual event stream            |
 |   15 | synthetic_sim        | simulator or replay source              |
+|   16 | quantum_rf           | calibrated Rydberg RF vector receiver   |
+
+Code 16 and its tensor semantics are defined by
+[ADR-266](./ADR-266-quantum-rf-vector-sensing.md). Existing codes remain
+unchanged.
 
 ## 9. Field Tensor
 
@@ -173,6 +178,8 @@ Default system policy: edge storage may retain P0 only temporarily; network tran
 ## 11. Provenance Receipt
 
 Every event must be auditable (`ProvenanceReceipt`). Acceptance invariant: **No fused inference is valid unless every contributing event has a provenance receipt or is explicitly marked synthetic.**
+
+ADR-266 narrows this rule for quantum RF production fusion: synthetic and replay evidence are rejected, and a valid signature is authorized only through a deployment registry that also binds device identity, pose, frame, calibration hash and validity, revocation, freshness, and monotonic timestamp state.
 
 ## 12. Fusion Graph
 
@@ -208,6 +215,15 @@ v0.1 must support three real modalities: WiFi CSI, mmWave radar, Infrared therma
 > thermal IR remain synthetic in v0.1. Live-hardware streaming and
 > labeled-accuracy validation remain roadmap. See the Implementation-Status
 > section below.
+
+ADR-266 also adds a strict quantum RF vector replay adapter and a
+sign-invariant multi-sensor bearing solver. The checked-in quantum fixture is
+synthetic analytic data. It proves the software contract and failure gates,
+not Rydberg hardware performance.
+
+The source-breaking Rust API extension is released through workspace crate
+version 0.2.0. The additive wire specification remains `rufield.mfs.v0.1`;
+crate and wire versions are intentionally independent.
 
 ## 18. Benchmark Suite
 
@@ -321,9 +337,9 @@ And produces a deterministic benchmark report
 
 ---
 
-## Implementation Status (v0.1 reference stack)
+## Implementation Status (wire v0.1, crates v0.2)
 
-The v0.1 reference stack is implemented as a **standalone Cargo workspace**
+The wire v0.1 reference stack is implemented as a **standalone Cargo workspace**
 (`rufield/`, published as `github.com/ruvnet/rufield` and vendored into RuView
 as a submodule — the `vendor/rvcsi` pattern). It is pure Rust, builds and tests
 on Windows with no native deps (`ndarray`/`tch`/`openblas` are not used), and
@@ -358,31 +374,29 @@ known truth and runs within latency/privacy/provenance budgets — they are
 > fused events from it," not an accuracy claim. mmWave and thermal IR remain
 > synthetic.
 
+> **Quantum RF software extension.** `RydbergReplayAdapter` validates a strict
+> calibrated three-axis complex electric-field replay contract and emits a P1
+> antipodal bearing by default or explicit P0 raw phasors. `QuantumBearingFusion`
+> provides trust-gated, sign-invariant multi-sensor line intersection. No
+> Rydberg hardware capture is checked in, and no hardware sensitivity, update
+> rate, multipath, or angular-accuracy claim is made. See ADR-266.
+
 ### Crates delivered
 
 | Crate | Implements |
 |-------|-----------|
-| `rufield-core` | §7/§9/§16/§20 data model: `Modality` (15), `FieldAxis`, `FieldTensor` (shape↔values validated), `PrivacyClass` (P0–P5), `SensorDescriptor`, `Observation`, `FieldEvent`, `CalibrationReceipt`, `InferenceQuery`, `FieldInference`, `FieldEmbedding`; `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. §7 JSON example round-trips. |
+| `rufield-core` | §7/§9/§16/§20 data model: `Modality` (16), `FieldAxis`, `FieldTensor` (shape↔values validated), `PrivacyClass` (P0–P5), typed optional sensor pose, signed exact observation attributes, `Observation`, `FieldEvent`, `CalibrationReceipt`, `InferenceQuery`, `FieldInference`, `FieldEmbedding`; `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. §7 JSON example round-trips. |
 | `rufield-provenance` | Real `sha256` content hashing + deterministic `ed25519` sign/verify; §11 `is_fusable` invariant. Tests: tamper → verify fails; synthetic event fusable without signer. |
 | `rufield-privacy` | §10 default policy + `DefaultPrivacyGuard` (`authorize` → Allow/Deny/RequiresConsent). Tests: P0 transmit denied; P4 no-consent → RequiresConsent; P4 consent → Allow; P2 → Allow; P5 needs identity binding. |
-| `rufield-adapters` | Deterministic seeded `SyntheticSim` emitting the §19 sequence across 3 modalities (wifi_csi, mmwave_radar, infrared_thermal); same seed ⇒ identical signed event stream with ground-truth labels. **Plus `CsiReplayAdapter`** — the first **real (non-synthetic)** adapter: parses real captured WiFi CSI from `.csi.jsonl`, calibrates an empty-room baseline, emits signed `FieldEvent`s with a CSI-variance motion/presence proxy (replay from file, unlabeled — NOT validated accuracy). |
-| `rufield-fusion` | `FusionGraph` (§12) + `RuFieldFusion` engine; TOML rules (§13, ≥5 inferences: person_present, sitting, sleeping, breathing, nocturnal_scratch, bed_exit, room_transition); weighted-Bayes + temporal-window; rejects non-fusable events; `FieldInference` with §24 fields. |
+| `rufield-adapters` | Deterministic seeded `SyntheticSim` emitting the §19 sequence across 3 modalities; `CsiReplayAdapter` for real captured but unlabeled WiFi CSI; and strict `RydbergReplayAdapter` with default P1 antipodal bearing, explicit P0 raw field, quality gates, typed pose, and deterministic provenance. The quantum fixture is synthetic and makes no hardware-accuracy claim. |
+| `rufield-fusion` | `FusionGraph` (§12) + `RuFieldFusion` engine with weighted-Bayes and temporal-window rules; plus `QuantumBearingFusion`, which requires a production deployment registry binding device, signer, frame, typed pose, calibration hash and expiry, revocation, freshness, and monotonic timestamps. It also requires exact signal grouping, full-span carrier tolerance, nonempty overlap of half-open integration intervals, spatial and angular diversity, and a bounded condition number before producing a sign-invariant position estimate whose expiry is capped by the earliest calibration. |
 | `rufield-bench` | Deterministic runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations; JSON + human table; §31 acceptance test as `#[test]`. |
 | `rufield-viewer` | §14 Layer 7 / §27.9 read-only web dashboard (Axum + vanilla JS, no build step). **Two sources** (`--source synthetic` default, or `--source live --upstream <URL>`): SYNTHETIC drives `SyntheticSim → RuFieldFusion`; LIVE ingests real `FieldEvent`s from an external RuField upstream (RuView `/ws/field` / `/api/field`, **ADR-262 P3**) — preferring the `/ws/field` SSE stream, falling back to polling `/api/field` — verifying each event's provenance receipt **on ingest** (`is_fusable`) and feeding only verified events through the same fusion/inference display path (unverified events are flagged ✗ and never fused). Serves `GET /` (page), `GET /events` (SSE), `GET /api/source` (source + banner state), `GET /api/run` (deterministic JSON; 409 in live mode), `GET /health`. Panels (identical across sources): live room state, event log with modality + P0–P5 privacy badges + verified ✓/✗ badge, fusion graph, signed-receipt viewer. **Banner honesty:** `SYNTHETIC` (amber) / `LIVE — <upstream>` (green, connected) / `DISCONNECTED — <upstream> unreachable` (red) — mutually exclusive, never mislabeled, no silent synthetic fallback in live mode. Tests assert the synthetic banner is present, `/api/run` is deterministic with ≥1 event/modality (each with privacy class + receipt) and ≥5 inferences, the SSE order is deterministic, the live source reports LIVE-not-SYNTHETIC with the upstream URL, the ingest deserializer verifies a real signed `/api/field` payload and renders it while a tampered event is flagged unverified-and-not-fused. |
 
-Total test count across the workspace: **0 failed**. Per-crate (verified): core
-12, provenance 6, privacy 7, `rufield-adapters` 25 lib + 3 integration (the new
-`CsiReplayAdapter` real-CSI tests), `rufield-fusion` 3, bench 12, viewer 12.
-`cargo clippy -p rufield-adapters` is clean.
-
-> Environmental note: on this Windows box, Windows Defender intermittently
-> blocks execution of a freshly-rebuilt test binary (`os error 5`, "Access is
-> denied"), which can abort the aggregate run for an individual crate's
-> *unittest exe* (observed for `rufield-fusion` after a rebuild). It is an
-> environmental exec-block, not a code failure — the crate compiles clean, and
-> the real-CSI → fusion path is exercised and **green** through the
-> `rufield-adapters` integration test (`csi_replay_fusion`), which drives
-> `RuFieldFusion::ingest`/`infer` over the 199-frame real-CSI fixture.
+Revision-bound validation is enforced by CI: workspace build and tests, the
+optimized quantum RF performance gate, Clippy with warnings denied across all
+targets, and the deterministic benchmark. Exact counts and timings belong to
+the CI or PR run rather than this long-lived ADR.
 
 ### §27 acceptance-criteria scorecard
 
@@ -403,7 +417,7 @@ Total test count across the workspace: **0 failed**. Per-crate (verified): core
 previously deferred; it is satisfied by `rufield-viewer`, a read-only SYNTHETIC
 dashboard that streams the §19 camera-free room-intelligence demo (room state +
 privacy-class badges + fusion graph + signed-receipt viewer) over SSE/JSON.
-Status remains **Accepted — v0.1 reference stack** (now with the dashboard
+Status remains **Accepted — wire v0.1 reference stack, crates v0.2** (now with the dashboard
 criterion met). Note the viewer is a demo viewer, not a device-management
 console — there are no real devices in v0.1; fleet/real-adapter management is a
 separate later milestone.

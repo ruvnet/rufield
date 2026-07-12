@@ -12,7 +12,7 @@
 //! The report is deterministic: the same seed yields identical scores
 //! (latency is wall-clock and therefore the only non-deterministic field).
 
-#![doc(html_root_url = "https://docs.rs/rufield-bench/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/rufield-bench/0.2.0")]
 
 pub mod metrics;
 pub mod report;

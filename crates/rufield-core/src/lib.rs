@@ -7,11 +7,11 @@
 //! enums, and the `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard`
 //! traits.
 //!
-//! All numbers produced by the v0.1 reference stack come from a deterministic
-//! **synthetic simulator** — there is no hardware in this stack. Nothing here
-//! claims field-validated accuracy.
+//! Core wire types make no accuracy claim. Repository benchmark scores remain
+//! deterministic synthetic evidence; file-replay adapters must preserve their
+//! own synthetic, captured-replay, or live evidence labels.
 
-#![doc(html_root_url = "https://docs.rs/rufield-core/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/rufield-core/0.2.0")]
 
 pub mod error;
 pub mod event;

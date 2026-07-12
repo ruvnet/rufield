@@ -149,4 +149,46 @@ mod tests {
         .unwrap_err();
         matches!(err, CoreError::AxisRankMismatch { .. });
     }
+
+    #[test]
+    fn quantum_rf_bearing_candidates_round_trip() {
+        let t = FieldTensor::new(
+            1,
+            Modality::QuantumRf,
+            vec![FieldAxis::DirectionCandidate, FieldAxis::CartesianComponent],
+            vec![2, 3],
+            vec![0.6, 0.0, 0.8, -0.6, 0.0, -0.8],
+            0.95,
+            0.01,
+            Some("rydberg_cal_1".into()),
+            PrivacyClass::P1,
+        )
+        .unwrap();
+
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(json.contains("\"modality\":\"quantum_rf\""));
+        assert!(json.contains("\"direction_candidate\""));
+        assert!(json.contains("\"cartesian_component\""));
+        assert_eq!(serde_json::from_str::<FieldTensor>(&json).unwrap(), t);
+    }
+
+    #[test]
+    fn quantum_rf_complex_field_round_trip() {
+        let t = FieldTensor::new(
+            1,
+            Modality::QuantumRf,
+            vec![FieldAxis::CartesianComponent, FieldAxis::ComplexComponent],
+            vec![3, 2],
+            vec![1.0, 0.0, 0.0, 1.0, -1.0, 0.5],
+            0.9,
+            0.01,
+            Some("rydberg_cal_1".into()),
+            PrivacyClass::P0,
+        )
+        .unwrap();
+
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(json.contains("\"complex_component\""));
+        assert_eq!(serde_json::from_str::<FieldTensor>(&json).unwrap(), t);
+    }
 }

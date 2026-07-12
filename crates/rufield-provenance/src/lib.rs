@@ -14,9 +14,9 @@
 //! input always yields the same receipt — a requirement for the deterministic
 //! benchmark.
 
-#![doc(html_root_url = "https://docs.rs/rufield-provenance/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/rufield-provenance/0.2.0")]
 
-use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _, VerifyingKey};
+use ed25519_dalek::{Signature, Signer as _, SigningKey, VerifyingKey};
 use rufield_core::FieldEvent;
 use sha2::{Digest, Sha256};
 
@@ -155,12 +155,7 @@ pub fn verify_event(event: &FieldEvent) -> Result<(), ProvenanceError> {
         .as_ref()
         .ok_or(ProvenanceError::MissingSignature)?;
 
-    let pk_bytes = hex_decode(pk_hex)?;
-    let pk_arr: [u8; 32] = pk_bytes
-        .try_into()
-        .map_err(|_| ProvenanceError::BadEncoding("pubkey not 32 bytes".into()))?;
-    let vk = VerifyingKey::from_bytes(&pk_arr)
-        .map_err(|e| ProvenanceError::BadEncoding(e.to_string()))?;
+    let vk = verifying_key_from_hex(pk_hex)?;
 
     let sig_bytes = hex_decode(sig_hex)?;
     let sig_arr: [u8; 64] = sig_bytes
@@ -169,8 +164,32 @@ pub fn verify_event(event: &FieldEvent) -> Result<(), ProvenanceError> {
     let sig = Signature::from_bytes(&sig_arr);
 
     let msg = canonical_event_bytes(event)?;
-    vk.verify(&msg, &sig)
+    vk.verify_strict(&msg, &sig)
         .map_err(|_| ProvenanceError::VerifyFailed)
+}
+
+/// Validate and canonicalize a non-weak Ed25519 public key encoded as hex.
+///
+/// Production authorization must reject small-order keys even if their byte
+/// encoding is otherwise accepted by the curve decoder.
+pub fn normalize_verifying_key_hex(value: &str) -> Result<String, ProvenanceError> {
+    let key = verifying_key_from_hex(value)?;
+    Ok(hex_encode(key.as_bytes()))
+}
+
+fn verifying_key_from_hex(value: &str) -> Result<VerifyingKey, ProvenanceError> {
+    let pk_bytes = hex_decode(value)?;
+    let pk_arr: [u8; 32] = pk_bytes
+        .try_into()
+        .map_err(|_| ProvenanceError::BadEncoding("pubkey not 32 bytes".into()))?;
+    let key = VerifyingKey::from_bytes(&pk_arr)
+        .map_err(|error| ProvenanceError::BadEncoding(error.to_string()))?;
+    if key.is_weak() {
+        return Err(ProvenanceError::BadEncoding(
+            "weak or small-order public key".into(),
+        ));
+    }
+    Ok(key)
 }
 
 /// The §11 fusability invariant. An event may be fused into an inference iff it
@@ -212,6 +231,9 @@ mod tests {
                 vendor: "esp32_c6".into(),
                 device_id: "d1".into(),
                 placement: "corner".into(),
+                coordinate_frame: None,
+                position_m: None,
+                orientation_xyzw: None,
                 clock_domain: "local".into(),
             },
             tensor,
@@ -257,6 +279,12 @@ mod tests {
         ev.tensor.values[0] = 99.0;
         assert!(verify_event(&ev).is_err());
         assert!(!is_fusable(&ev)); // not synthetic, signature broken ⇒ not fusable
+    }
+
+    #[test]
+    fn weak_public_keys_are_rejected() {
+        assert!(normalize_verifying_key_hex(&"00".repeat(32)).is_err());
+        assert!(normalize_verifying_key_hex(&format!("01{}", "00".repeat(31))).is_err());
     }
 
     #[test]

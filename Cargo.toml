@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["rUv <ruv@ruv.net>", "RuField Contributors"]
 license = "MIT"
@@ -28,13 +28,13 @@ sha2 = "0.10"
 ed25519-dalek = "2.1"
 
 # Internal crates
-rufield-core = { version = "0.1.0", path = "crates/rufield-core" }
-rufield-provenance = { version = "0.1.0", path = "crates/rufield-provenance" }
-rufield-privacy = { version = "0.1.0", path = "crates/rufield-privacy" }
-rufield-adapters = { version = "0.1.0", path = "crates/rufield-adapters" }
-rufield-fusion = { version = "0.1.0", path = "crates/rufield-fusion" }
-rufield-bench = { version = "0.1.0", path = "crates/rufield-bench" }
-rufield-viewer = { version = "0.1.0", path = "crates/rufield-viewer" }
+rufield-core = { version = "0.2.0", path = "crates/rufield-core" }
+rufield-provenance = { version = "0.2.0", path = "crates/rufield-provenance" }
+rufield-privacy = { version = "0.2.0", path = "crates/rufield-privacy" }
+rufield-adapters = { version = "0.2.0", path = "crates/rufield-adapters" }
+rufield-fusion = { version = "0.2.0", path = "crates/rufield-fusion" }
+rufield-bench = { version = "0.2.0", path = "crates/rufield-bench" }
+rufield-viewer = { version = "0.2.0", path = "crates/rufield-viewer" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
