@@ -11,7 +11,7 @@
 //! [`DefaultPrivacyGuard::authorize`] returns [`PrivacyDecision::Allow`],
 //! [`PrivacyDecision::Deny`], or [`PrivacyDecision::RequiresConsent`].
 
-#![doc(html_root_url = "https://docs.rs/rufield-privacy/0.1.0")]
+#![doc(html_root_url = "https://docs.rs/rufield-privacy/0.2.0")]
 
 use rufield_core::{Destination, PrivacyClass, PrivacyDecision, PrivacyGuard};
 

@@ -1,8 +1,10 @@
 //! Modality registry (ADR-260 §8) and field tensor axes (§9).
 
+use crate::error::CoreError;
 use serde::{Deserialize, Serialize};
+use std::{fmt, str::FromStr};
 
-/// The 15 sensing modalities defined in the RuField MFS modality registry
+/// The sensing modalities defined in the RuField MFS modality registry
 /// (ADR-260 §8). Each maps to a stable numeric code on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -37,6 +39,8 @@ pub enum Modality {
     EventCamera,
     /// 15 — Simulator or replay source.
     SyntheticSim,
+    /// 16 — Rydberg-atom electric-field vector receiver.
+    QuantumRf,
 }
 
 impl Modality {
@@ -59,12 +63,60 @@ impl Modality {
             Modality::QuantumInertial => 13,
             Modality::EventCamera => 14,
             Modality::SyntheticSim => 15,
+            Modality::QuantumRf => 16,
         }
     }
 
-    /// All 15 modalities in registry order.
+    /// Canonical string used by serde and the MFS wire format.
     #[must_use]
-    pub fn all() -> [Modality; 15] {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Modality::WifiCsi => "wifi_csi",
+            Modality::WifiCir => "wifi_cir",
+            Modality::WifiBfld => "wifi_bfld",
+            Modality::UwbHrp => "uwb_hrp",
+            Modality::BleChannelSounding => "ble_channel_sounding",
+            Modality::MmwaveRadar => "mmwave_radar",
+            Modality::Ultrasonic => "ultrasonic",
+            Modality::Subsonic => "subsonic",
+            Modality::InfraredThermal => "infrared_thermal",
+            Modality::ActiveInfrared => "active_infrared",
+            Modality::LidarPhase => "lidar_phase",
+            Modality::QuantumMagnetic => "quantum_magnetic",
+            Modality::QuantumInertial => "quantum_inertial",
+            Modality::EventCamera => "event_camera",
+            Modality::SyntheticSim => "synthetic_sim",
+            Modality::QuantumRf => "quantum_rf",
+        }
+    }
+
+    /// Resolve a stable numeric registry code.
+    #[must_use]
+    pub const fn from_code(code: u8) -> Option<Self> {
+        match code {
+            1 => Some(Modality::WifiCsi),
+            2 => Some(Modality::WifiCir),
+            3 => Some(Modality::WifiBfld),
+            4 => Some(Modality::UwbHrp),
+            5 => Some(Modality::BleChannelSounding),
+            6 => Some(Modality::MmwaveRadar),
+            7 => Some(Modality::Ultrasonic),
+            8 => Some(Modality::Subsonic),
+            9 => Some(Modality::InfraredThermal),
+            10 => Some(Modality::ActiveInfrared),
+            11 => Some(Modality::LidarPhase),
+            12 => Some(Modality::QuantumMagnetic),
+            13 => Some(Modality::QuantumInertial),
+            14 => Some(Modality::EventCamera),
+            15 => Some(Modality::SyntheticSim),
+            16 => Some(Modality::QuantumRf),
+            _ => None,
+        }
+    }
+
+    /// All 16 modalities in registry order.
+    #[must_use]
+    pub fn all() -> [Modality; 16] {
         [
             Modality::WifiCsi,
             Modality::WifiCir,
@@ -81,7 +133,25 @@ impl Modality {
             Modality::QuantumInertial,
             Modality::EventCamera,
             Modality::SyntheticSim,
+            Modality::QuantumRf,
         ]
+    }
+}
+
+impl fmt::Display for Modality {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for Modality {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::all()
+            .into_iter()
+            .find(|modality| modality.as_str() == value)
+            .ok_or_else(|| CoreError::Invalid(format!("unknown modality {value:?}")))
     }
 }
 
@@ -113,6 +183,65 @@ pub enum FieldAxis {
     Uncertainty,
     /// Spatial channel / antenna index.
     Channel,
+    /// Cartesian vector component; indices conventionally represent x, y, z.
+    CartesianComponent,
+    /// Complex value component; indices conventionally represent real, imaginary.
+    ComplexComponent,
+    /// Ambiguous direction candidate; indices conventionally represent +k, -k.
+    DirectionCandidate,
+}
+
+impl FieldAxis {
+    /// Canonical string used by serde and the MFS wire format.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            FieldAxis::Time => "time",
+            FieldAxis::Frequency => "frequency",
+            FieldAxis::Phase => "phase",
+            FieldAxis::Amplitude => "amplitude",
+            FieldAxis::Range => "range",
+            FieldAxis::Velocity => "velocity",
+            FieldAxis::Angle => "angle",
+            FieldAxis::Temperature => "temperature",
+            FieldAxis::Vibration => "vibration",
+            FieldAxis::Uncertainty => "uncertainty",
+            FieldAxis::Channel => "channel",
+            FieldAxis::CartesianComponent => "cartesian_component",
+            FieldAxis::ComplexComponent => "complex_component",
+            FieldAxis::DirectionCandidate => "direction_candidate",
+        }
+    }
+}
+
+impl fmt::Display for FieldAxis {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl FromStr for FieldAxis {
+    type Err = CoreError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "time" => Ok(FieldAxis::Time),
+            "frequency" => Ok(FieldAxis::Frequency),
+            "phase" => Ok(FieldAxis::Phase),
+            "amplitude" => Ok(FieldAxis::Amplitude),
+            "range" => Ok(FieldAxis::Range),
+            "velocity" => Ok(FieldAxis::Velocity),
+            "angle" => Ok(FieldAxis::Angle),
+            "temperature" => Ok(FieldAxis::Temperature),
+            "vibration" => Ok(FieldAxis::Vibration),
+            "uncertainty" => Ok(FieldAxis::Uncertainty),
+            "channel" => Ok(FieldAxis::Channel),
+            "cartesian_component" => Ok(FieldAxis::CartesianComponent),
+            "complex_component" => Ok(FieldAxis::ComplexComponent),
+            "direction_candidate" => Ok(FieldAxis::DirectionCandidate),
+            _ => Err(CoreError::Invalid(format!("unknown field axis {value:?}"))),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -120,21 +249,74 @@ mod tests {
     use super::*;
 
     #[test]
-    fn modality_has_15_variants() {
-        assert_eq!(Modality::all().len(), 15);
+    fn modality_has_16_variants() {
+        assert_eq!(Modality::all().len(), 16);
     }
 
     #[test]
-    fn modality_codes_are_1_to_15_unique() {
+    fn modality_codes_are_1_to_16_unique_and_reversible() {
         let codes: Vec<u8> = Modality::all().iter().map(|m| m.code()).collect();
-        assert_eq!(codes, (1..=15).collect::<Vec<u8>>());
+        assert_eq!(codes, (1..=16).collect::<Vec<u8>>());
+        for modality in Modality::all() {
+            assert_eq!(Modality::from_code(modality.code()), Some(modality));
+        }
+        assert_eq!(Modality::from_code(0), None);
+        assert_eq!(Modality::from_code(17), None);
     }
 
     #[test]
-    fn modality_serde_snake_case() {
-        let j = serde_json::to_string(&Modality::WifiCsi).unwrap();
-        assert_eq!(j, "\"wifi_csi\"");
-        let m: Modality = serde_json::from_str("\"mmwave_radar\"").unwrap();
-        assert_eq!(m, Modality::MmwaveRadar);
+    fn modality_string_and_serde_mappings_are_consistent() {
+        for modality in Modality::all() {
+            assert_eq!(modality.to_string(), modality.as_str());
+            assert_eq!(modality.as_str().parse::<Modality>().unwrap(), modality);
+            assert_eq!(
+                serde_json::to_string(&modality).unwrap(),
+                format!("\"{}\"", modality.as_str())
+            );
+            let decoded: Modality = serde_json::from_str(&format!("\"{}\"", modality.as_str()))
+                .expect("canonical modality should deserialize");
+            assert_eq!(decoded, modality);
+        }
+        assert!("quantum-rf".parse::<Modality>().is_err());
+    }
+
+    #[test]
+    fn quantum_rf_registry_contract_is_stable() {
+        assert_eq!(Modality::QuantumRf.code(), 16);
+        assert_eq!(Modality::QuantumRf.as_str(), "quantum_rf");
+        assert_eq!(
+            serde_json::to_string(&Modality::QuantumRf).unwrap(),
+            "\"quantum_rf\""
+        );
+    }
+
+    #[test]
+    fn field_axis_string_and_serde_mappings_are_consistent() {
+        let axes = [
+            FieldAxis::Time,
+            FieldAxis::Frequency,
+            FieldAxis::Phase,
+            FieldAxis::Amplitude,
+            FieldAxis::Range,
+            FieldAxis::Velocity,
+            FieldAxis::Angle,
+            FieldAxis::Temperature,
+            FieldAxis::Vibration,
+            FieldAxis::Uncertainty,
+            FieldAxis::Channel,
+            FieldAxis::CartesianComponent,
+            FieldAxis::ComplexComponent,
+            FieldAxis::DirectionCandidate,
+        ];
+
+        for axis in axes {
+            assert_eq!(axis.to_string(), axis.as_str());
+            assert_eq!(axis.as_str().parse::<FieldAxis>().unwrap(), axis);
+            assert_eq!(
+                serde_json::to_string(&axis).unwrap(),
+                format!("\"{}\"", axis.as_str())
+            );
+        }
+        assert!("cartesian-component".parse::<FieldAxis>().is_err());
     }
 }

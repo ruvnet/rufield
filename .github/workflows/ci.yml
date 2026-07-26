@@ -36,8 +36,11 @@ jobs:
       - name: Test
         run: cargo test --workspace
 
+      - name: Quantum RF release performance gate
+        run: cargo test -p rufield-adapters --release --test quantum_rf_performance -- --nocapture
+
       - name: Clippy
-        run: cargo clippy --workspace -- -W clippy::all
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Run deterministic benchmark
         run: cargo run -p rufield-bench -- 2026

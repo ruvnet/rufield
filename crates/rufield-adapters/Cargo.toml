@@ -2,11 +2,11 @@
 name = "rufield-adapters"
 version.workspace = true
 edition.workspace = true
-description = "RuField MFS adapters: deterministic seeded SyntheticSim emitting the §19 camera-free room-intelligence demo across 3 modalities"
+description = "RuField adapters for deterministic simulation, captured WiFi CSI replay, and calibrated quantum RF vector replay"
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-keywords = ["sensing", "simulator", "csi", "radar", "thermal"]
+keywords = ["sensing", "simulator", "csi", "radar", "quantum"]
 categories = ["science", "simulation"]
 
 [dependencies]

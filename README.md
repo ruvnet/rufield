@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Rust edition](https://img.shields.io/badge/rust-edition%202021-orange.svg)](https://www.rust-lang.org)
 [![spec](https://img.shields.io/badge/spec-rufield.mfs.v0.1-purple.svg)](./docs/ADR-260-rufield-mfs.md)
-[![status](https://img.shields.io/badge/status-v0.1%20reference%20stack-success.svg)](#user-guide)
+[![status](https://img.shields.io/badge/crates-0.2.0-success.svg)](#user-guide)
 [![camera-free](https://img.shields.io/badge/camera--free-yes-green.svg)](#what-it-is)
 [![privacy](https://img.shields.io/badge/privacy-P0--P5-informational.svg)](#privacy--provenance)
 
@@ -20,9 +20,11 @@
 > about what that is and is not: it is **replay from a file, not live
 > hardware**; the recordings are **unlabeled**, so its motion/presence output is
 > a **physically-grounded CSI-variance proxy, NOT validated accuracy** (no pose,
-> no accuracy numbers). The other modalities (mmWave, thermal IR) remain
-> synthetic. Live-hardware streaming and labeled-accuracy validation remain
-> documented roadmap items.
+> no accuracy numbers). Quantum RF now has a strict deterministic Rydberg
+> vector **replay contract**, but the included fixture is synthetic and no
+> Rydberg hardware capture or accuracy claim is included. The other demo
+> modalities (mmWave, thermal IR) remain synthetic. Live-hardware streaming
+> and labeled-accuracy validation remain documented roadmap items.
 
 ---
 
@@ -45,7 +47,8 @@ Ultrasonic          │               RuField Field Tensor
 Subsonic            │               RuField Fusion Graph
 Infrared            │               RuField Privacy Class
 Quantum magnetic    │               RuField Provenance Receipt
-Quantum inertial    ┘
+Quantum inertial    │
+Quantum RF vector   ┘
 ```
 
 RuField does **not** replace IEEE 802.11bf, Bluetooth Channel Sounding, UWB,
@@ -54,17 +57,18 @@ privacy-aware, provenance-rich, fusion-ready event model for camera-free
 ambient sensing.
 
 The full specification of record is
-[ADR-260](./docs/ADR-260-rufield-mfs.md).
+[ADR-260](./docs/ADR-260-rufield-mfs.md). The quantum RF extension is specified
+in [ADR-266](./docs/ADR-266-quantum-rf-vector-sensing.md).
 
 ## Crates
 
 | Crate | Description |
 |-------|-------------|
-| [`rufield-core`](crates/rufield-core) | Data model + traits: `Modality` (15), `FieldAxis`, `FieldTensor`, `PrivacyClass` (P0–P5), `FieldEvent`, `Observation`, `CalibrationReceipt`, `FieldInference`, and the `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. |
+| [`rufield-core`](crates/rufield-core) | Data model + traits: `Modality` (16), `FieldAxis`, `FieldTensor`, typed optional sensor pose, exact signed observation attributes, `PrivacyClass` (P0–P5), `FieldEvent`, `Observation`, `CalibrationReceipt`, `FieldInference`, and the `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. |
 | [`rufield-provenance`](crates/rufield-provenance) | Real `sha256` content hashing + `ed25519` sign/verify, and the §11 fusability invariant (`is_fusable`). |
 | [`rufield-privacy`](crates/rufield-privacy) | `PrivacyClass` policy + `DefaultPrivacyGuard`: P0 edge-only, network ≤ P2, P4 consent gate, P5 identity binding. |
-| [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter (camera-free room-intelligence demo across 3 modalities) **plus `CsiReplayAdapter`** — the first real (non-synthetic) adapter, replaying real captured WiFi CSI from a `.csi.jsonl` recording (replay, unlabeled). |
-| [`rufield-fusion`](crates/rufield-fusion) | `FusionGraph` + `RuFieldFusion` engine with TOML rules (weighted-Bayes / temporal-window), confidence + expiry. |
+| [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim`, real-capture `CsiReplayAdapter`, and strict `RydbergReplayAdapter`. Quantum RF defaults to a P1 antipodal bearing; raw complex electric field output is explicit P0. The included quantum fixture is synthetic, not hardware validation. |
+| [`rufield-fusion`](crates/rufield-fusion) | `FusionGraph` + `RuFieldFusion` with TOML rules, plus bounded `QuantumBearingFusion` for trust-gated, sign-invariant multi-sensor line intersection with covariance and geometry rejection. |
 | [`rufield-bench`](crates/rufield-bench) | Deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations, and the ADR-260 §31 acceptance test. |
 | [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): room state, event log with privacy badges, fusion graph, signed-receipt viewer. **Two sources** — `--source synthetic` (default) replays `SyntheticSim → RuFieldFusion`; `--source live --upstream <URL>` ingests **real** `FieldEvent`s from a RuField upstream (RuView `/ws/field` / `/api/field`, ADR-262 P3), verifying each receipt on ingest. Honest, mutually-exclusive `SYNTHETIC` / `LIVE` / `DISCONNECTED` banner. Not a device-management console. |
 
@@ -154,12 +158,17 @@ To depend on the crates from your own project (once published / vendored):
 
 ```toml
 [dependencies]
-rufield-core       = "0.1"
-rufield-adapters   = "0.1"
-rufield-fusion     = "0.1"
-rufield-privacy    = "0.1"
-rufield-provenance = "0.1"
+rufield-core       = "0.2"
+rufield-adapters   = "0.2"
+rufield-fusion     = "0.2"
+rufield-privacy    = "0.2"
+rufield-provenance = "0.2"
 ```
+
+The crates move to `0.2.0` because the new public enum variants and typed pose
+fields are Rust source compatibility breaks for exhaustive matches and struct
+literals. The serialized MFS wire identifier remains `rufield.mfs.v0.1`; the
+wire extension is additive and legacy events omit the new optional fields.
 
 ## Usage
 
@@ -253,6 +262,44 @@ while let Some(event) = adapter.next_event()? {
 > presence/breathing inferences from real signal; live-hardware streaming and
 > labeled-accuracy validation remain roadmap.
 
+### Quantum RF vector replay
+
+`RydbergReplayAdapter` implements the ADR-266 software boundary for calibrated
+three-axis Rydberg electric-field measurements. Strict JSONL input is checked
+for finite values, calibration validity, ellipticity, phasor-to-axis agreement,
+angular covariance, optical lock, SNR, pose, bounded identifiers, and monotonic
+timestamps before an event can be emitted.
+
+```rust
+use rufield_adapters::RydbergReplayAdapter;
+use rufield_core::{FieldAdapter, Modality, PrivacyClass};
+
+let jsonl = std::fs::read_to_string("recording.quantum-rf.jsonl")?;
+let mut adapter = RydbergReplayAdapter::from_jsonl(&jsonl)?;
+let event = adapter.next_event()?.expect("validated replay frame");
+
+assert_eq!(event.tensor.modality, Modality::QuantumRf);
+assert_eq!(event.tensor.shape, vec![2, 3]);
+assert_eq!(event.tensor.privacy_class, PrivacyClass::P1);
+assert_eq!(event.observation.attributes["tensor_frame"], "sensor_local");
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+The default event preserves the unresolved propagation axis as `[+k, -k]`.
+`QuantumBearingFusion` intersects two or more signed, synchronized, independently
+positioned sensor axes without inventing a sign. Production fusion rejects
+synthetic and replay events and requires a deployment registry that binds one
+device to one signer, surveyed pose, coordinate frame, calibration hash and
+validity, revocation state, freshness window, and replay watermark. Raw complex
+field mode must be selected explicitly, is classified P0, and is denied
+network transmission by the default privacy guard.
+
+> **Evidence boundary:** the checked-in fixture is analytic synthetic data.
+> This implementation validates schemas, invariants, trust policy, privacy
+> handling, and deterministic geometry. It does not validate a Rydberg receiver,
+> multipath performance, update rate, sensitivity, or angular accuracy. Those
+> gates are defined in [ADR-266](./docs/ADR-266-quantum-rf-vector-sensing.md).
+
 ## User guide
 
 ### Run the camera-free room-intelligence demo
@@ -314,9 +361,16 @@ other v0.1 criteria pass.
 
 ## Firmware
 
-**v0.1 ships synthetic adapters only — no hardware adapter is validated.** The
-3 modalities in the demo are simulated. This section describes how real edge
-hardware connects, as the documented follow-up.
+**No live hardware adapter is validated.** The room-intelligence demo remains
+synthetic. WiFi CSI and quantum RF have bounded file-replay adapters; the
+repository includes real captured CSI but only synthetic quantum RF vectors.
+This section describes how live edge hardware connects as a documented
+follow-up.
+
+The current viewer's `LIVE` banner reports transport connectivity and is not
+yet evidence-kind aware. Do not route quantum RF analytic or captured replay
+through the live viewer source; replay-aware viewer states are an explicit
+ADR-266 follow-up.
 
 A firmware integrator implements the `FieldAdapter` trait from `rufield-core`:
 
@@ -336,12 +390,13 @@ Planned real sources:
 | WiFi CSI | ESP32-C6 / ESP32-S3 | Use the RuView [`esp32-csi-node`](https://github.com/ruvnet/RuView) firmware as the CSI source; normalize CSI amplitude/phase into a `FieldTensor`. |
 | mmWave | Seeed MR60BHA2 (60 GHz FMCW) or similar cheap module | Range-Doppler bins → `FieldTensor` with `Range`/`Velocity` axes. |
 | Thermal IR | Low-res thermal array (e.g. AMG8833/MLX90640) | Temperature grid → `FieldTensor` with `Temperature` axis. |
+| Quantum RF | Calibrated three-axis Rydberg vector receiver | Normalize vendor output into the ADR-266 frame contract; require independent pose, timing, calibration authority, and signer enrollment. No hardware integration is included. |
 
 **Privacy default for real adapters:** raw frames are **P0 and stay
 on-device** (the guard denies P0 network transmission by default); only
 derived observations at **P2 or below** cross the network without an explicit
-consent / identity gate. No hardware adapter has been built or validated in
-v0.1 — these are honest follow-ups, not shipped features.
+consent / identity gate. No live hardware adapter has been built or validated
+in v0.1 — these are honest follow-ups, not shipped features.
 
 ## Privacy & provenance
 
@@ -372,9 +427,10 @@ any field after signing makes verification (and fusability) fail.
 
 ## Spec / ADR
 
-The specification of record is [ADR-260](./docs/ADR-260-rufield-mfs.md). It
-defines the Field Event, Field Tensor, modality registry, privacy classes,
-provenance receipts, fusion rules, benchmark suite, and acceptance criteria.
+The base specification of record is [ADR-260](./docs/ADR-260-rufield-mfs.md).
+The quantum RF modality, tensor contracts, calibration model, trust boundary,
+sign-invariant fusion, benchmarks, and rollout gates are defined by
+[ADR-266](./docs/ADR-266-quantum-rf-vector-sensing.md).
 
 ## License
 
@@ -384,5 +440,6 @@ provenance receipts, fusion rules, benchmark suite, and acceptance criteria.
 
 Issues and PRs welcome. Keep crates pure-Rust and `cargo test --workspace`
 green; new adapters implement `FieldAdapter` and must respect the P0-edge-only
-privacy default. All benchmark numbers must remain honestly labelled SYNTHETIC
-until a real hardware adapter is validated.
+privacy default. Every metric must retain its evidence label; analytic replay,
+captured replay, and live hardware results must never be presented as
+interchangeable.
