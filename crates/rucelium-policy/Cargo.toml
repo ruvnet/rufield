@@ -1,0 +1,20 @@
+[package]
+name = "rucelium-policy"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium governed control path: agent proposal -> policy -> safety simulation -> authority -> signed command -> gateway validation -> execution receipt, typed so no stage can be skipped (ADR-264 §9)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "governance", "agents", "policy"]
+categories = ["science"]
+
+[dependencies]
+rucelium-core = { workspace = true }
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

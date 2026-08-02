@@ -895,6 +895,163 @@ dependencies = [
 ]
 
 [[package]]
+name = "rucelium-abi"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rucelium-core",
+ "sha2",
+]
+
+[[package]]
+name = "rucelium-bench"
+version = "0.1.0"
+dependencies = [
+ "rucelium-abi",
+ "rucelium-calibration",
+ "rucelium-core",
+ "rucelium-federation",
+ "rucelium-ingest",
+ "rucelium-policy",
+ "rucelium-worldgraph",
+ "rufield-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rucelium-calibration"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rucelium-core",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "rucelium-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "rucelium-examples"
+version = "0.1.0"
+dependencies = [
+ "rucelium-abi",
+ "rucelium-calibration",
+ "rucelium-core",
+ "rucelium-federation",
+ "rucelium-ingest",
+ "rucelium-policy",
+ "rucelium-store",
+ "rucelium-transport",
+ "rucelium-worldgraph",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rucelium-federation"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rucelium-abi",
+ "rucelium-core",
+ "rucelium-ingest",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "rucelium-gateway"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "quinn",
+ "reqwest",
+ "rucelium-abi",
+ "rucelium-calibration",
+ "rucelium-core",
+ "rucelium-federation",
+ "rucelium-ingest",
+ "rucelium-policy",
+ "rucelium-store",
+ "rucelium-transport",
+ "rucelium-worldgraph",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+]
+
+[[package]]
+name = "rucelium-ingest"
+version = "0.1.0"
+dependencies = [
+ "rucelium-abi",
+ "rucelium-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rucelium-notary"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rucelium-core",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "rucelium-policy"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rucelium-core",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "rucelium-store"
+version = "0.1.0"
+dependencies = [
+ "rucelium-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "rucelium-transport"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "rucelium-abi",
+]
+
+[[package]]
+name = "rucelium-worldgraph"
+version = "0.1.0"
+dependencies = [
+ "rucelium-core",
+ "rufield-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rufield-adapters"
 version = "0.1.0"
 dependencies = [

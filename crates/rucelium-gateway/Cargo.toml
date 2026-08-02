@@ -1,0 +1,58 @@
+[package]
+name = "rucelium-gateway"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium rhizome gateway daemon: UDP envelope ingestion (v1/v2/fragments), calibration, durable store, WorldGraph, local alerts, OGC SensorThings HTTP API, and biome federation sync over the network (ADR-265 §4)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "gateway", "daemon", "sensorthings"]
+categories = ["science", "web-programming"]
+
+[[bin]]
+name = "rucelium-gateway"
+path = "src/main.rs"
+
+[features]
+default = []
+# ADR-269 §4: the optional QUIC federation transport. Off by default — the
+# ADR-264 §14 acceptance path and the ADR-265 restart tests must both pass
+# with this feature disabled (ADR-269 §5).
+quic = ["dep:quinn", "dep:rustls"]
+
+[dependencies]
+rucelium-core = { workspace = true }
+rucelium-abi = { workspace = true }
+rucelium-transport = { workspace = true }
+rucelium-ingest = { workspace = true }
+rucelium-calibration = { workspace = true }
+rucelium-worldgraph = { workspace = true }
+rucelium-federation = { workspace = true }
+rucelium-policy = { workspace = true }
+rucelium-store = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+# ADR-269 §4 (optional, `quic` feature only). `rustls` is pinned to the
+# *ring* provider so the feature builds without a C toolchain, and because
+# ring supplies the Ed25519 signing the biome identity needs (RFC 7250 raw
+# public keys, ADR-269 §4 constraint 2).
+quinn = { version = "0.11", default-features = false, features = [
+    "runtime-tokio",
+    "rustls-ring",
+    "log",
+], optional = true }
+rustls = { version = "0.23", default-features = false, features = [
+    "ring",
+    "std",
+], optional = true }
+
+[dev-dependencies]
+tower = "0.5"
+
+[lints]
+workspace = true

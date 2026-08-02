@@ -1,0 +1,38 @@
+{
+  "name": "rucelium-harness",
+  "version": "0.1.0",
+  "description": "RuCelium metaharness — a Darwinian evolve/evaluate/select flywheel that drives the RuCelium Rust implementation toward the ADR-264 acceptance gate.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruvnet/rufield.git",
+    "directory": "harness"
+  },
+  "author": "rUv <ruv@ruv.net>",
+  "type": "module",
+  "bin": {
+    "rucelium": "./bin/rucelium.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "scripts": {
+    "fitness": "node bin/rucelium.js fitness",
+    "evolve": "node bin/rucelium.js evolve",
+    "gate": "node bin/rucelium.js gate",
+    "doctor": "node bin/rucelium.js doctor"
+  },
+  "keywords": [
+    "rucelium",
+    "rufield",
+    "metaharness",
+    "darwin",
+    "flywheel",
+    "environmental-sensing",
+    "rust"
+  ]
+}

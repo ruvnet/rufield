@@ -8,6 +8,19 @@ members = [
     "crates/rufield-fusion",
     "crates/rufield-bench",
     "crates/rufield-viewer",
+    "crates/rucelium-core",
+    "crates/rucelium-abi",
+    "crates/rucelium-ingest",
+    "crates/rucelium-calibration",
+    "crates/rucelium-worldgraph",
+    "crates/rucelium-policy",
+    "crates/rucelium-federation",
+    "crates/rucelium-bench",
+    "crates/rucelium-store",
+    "crates/rucelium-transport",
+    "crates/rucelium-gateway",
+    "crates/rucelium-notary",
+    "examples",
 ]
 
 [workspace.package]
@@ -20,7 +33,12 @@ repository = "https://github.com/ruvnet/rufield"
 [workspace.dependencies]
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+# `float_roundtrip` is LOAD-BEARING, not a nicety: every signature in this
+# workspace is computed over canonical JSON, and a peer verifies by
+# re-serializing what it parsed. Without exact float parsing, ~9% of realistic
+# sensor values come back one ULP off, so a genuine signed summary or event
+# fails verification after a wire round-trip. Do not remove.
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
 toml = "0.8"
 
 # Provenance: hashing + signatures
@@ -35,6 +53,19 @@ rufield-adapters = { version = "0.1.0", path = "crates/rufield-adapters" }
 rufield-fusion = { version = "0.1.0", path = "crates/rufield-fusion" }
 rufield-bench = { version = "0.1.0", path = "crates/rufield-bench" }
 rufield-viewer = { version = "0.1.0", path = "crates/rufield-viewer" }
+rucelium-core = { version = "0.1.0", path = "crates/rucelium-core" }
+rucelium-abi = { version = "0.1.0", path = "crates/rucelium-abi" }
+rucelium-ingest = { version = "0.1.0", path = "crates/rucelium-ingest" }
+rucelium-calibration = { version = "0.1.0", path = "crates/rucelium-calibration" }
+rucelium-worldgraph = { version = "0.1.0", path = "crates/rucelium-worldgraph" }
+rucelium-policy = { version = "0.1.0", path = "crates/rucelium-policy" }
+rucelium-federation = { version = "0.1.0", path = "crates/rucelium-federation" }
+rucelium-bench = { version = "0.1.0", path = "crates/rucelium-bench" }
+rucelium-store = { version = "0.1.0", path = "crates/rucelium-store" }
+rucelium-transport = { version = "0.1.0", path = "crates/rucelium-transport" }
+rucelium-gateway = { version = "0.1.0", path = "crates/rucelium-gateway" }
+rucelium-notary = { version = "0.1.0", path = "crates/rucelium-notary" }
+rucelium-examples = { version = "0.1.0", path = "examples" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -57,3 +88,13 @@ uninlined_format_args = "allow"
 [profile.release]
 opt-level = 3
 lto = true
+
+# The RuCelium biome benchmark signs/verifies ~10^5 ed25519 envelopes per
+# run; unoptimized curve arithmetic makes debug `cargo test` minutes-slow.
+# Optimize just the crypto dependencies in dev builds.
+[profile.dev.package.curve25519-dalek]
+opt-level = 3
+[profile.dev.package.ed25519-dalek]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
