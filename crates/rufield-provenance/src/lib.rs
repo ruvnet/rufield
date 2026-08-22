@@ -1,12 +1,16 @@
 //! # rufield-provenance
 //!
-//! Provenance receipts for RuField MFS (ADR-260 §11). Provides real
-//! `sha256` hashing of feature / firmware / model / calibration material and
-//! `ed25519` detached signatures over [`FieldEvent`]s, plus the §11
-//! fusability invariant:
+//! Provenance receipts and policy verification for RuField MFS (ADR-260 §11).
+//! Provides real `sha256` hashing of feature / firmware / model / calibration
+//! material and `ed25519` detached signatures over [`FieldEvent`]s.
 //!
 //! > No fused inference is valid unless every contributing event has a
 //! > provenance receipt **or** is explicitly marked synthetic.
+//!
+//! That original invariant is retained by [`is_fusable`] for deterministic
+//! simulation compatibility only. Captured replay and production ingestion
+//! must use [`TrustVerifier`], which anchors event keys in an independently
+//! configured [`TrustedKeyRegistry`] and enforces replay protection.
 //!
 //! Signing is **deterministic**: ed25519 (RFC 8032) produces the same
 //! signature for the same key + message, and [`Signer`] derives its key
@@ -19,6 +23,13 @@
 use ed25519_dalek::{Signature, Signer as _, SigningKey, Verifier as _, VerifyingKey};
 use rufield_core::FieldEvent;
 use sha2::{Digest, Sha256};
+
+mod trust;
+
+pub use trust::{
+    ReplayState, ReplayWatermark, TrustError, TrustMode, TrustPolicy, TrustVerifier,
+    TrustedKeyRegistry, DEFAULT_MAX_EVENT_AGE_NS, DEFAULT_MAX_FUTURE_SKEW_NS, REPLAY_STATE_VERSION,
+};
 
 /// Compute a `sha256:<hex>` digest over arbitrary bytes (firmware image, raw
 /// measurement, model weights, calibration data).
@@ -97,16 +108,34 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(s: &str) -> Result<Vec<u8>, ProvenanceError> {
-    if !s.len().is_multiple_of(2) {
+    let bytes = s.as_bytes();
+    if !bytes.is_ascii() {
+        return Err(ProvenanceError::BadEncoding(
+            "hex input must contain ASCII characters only".into(),
+        ));
+    }
+    if !bytes.len().is_multiple_of(2) {
         return Err(ProvenanceError::BadEncoding("odd hex length".into()));
     }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&s[i..i + 2], 16)
-                .map_err(|e| ProvenanceError::BadEncoding(e.to_string()))
+    bytes
+        .chunks_exact(2)
+        .map(|pair| {
+            let high = hex_nibble(pair[0])?;
+            let low = hex_nibble(pair[1])?;
+            Ok((high << 4) | low)
         })
         .collect()
+}
+
+fn hex_nibble(byte: u8) -> Result<u8, ProvenanceError> {
+    match byte {
+        b'0'..=b'9' => Ok(byte - b'0'),
+        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        b'A'..=b'F' => Ok(byte - b'A' + 10),
+        _ => Err(ProvenanceError::BadEncoding(format!(
+            "invalid hex character 0x{byte:02x}"
+        ))),
+    }
 }
 
 /// A deterministic ed25519 signer derived from a 32-byte seed.
@@ -173,8 +202,13 @@ pub fn verify_event(event: &FieldEvent) -> Result<(), ProvenanceError> {
         .map_err(|_| ProvenanceError::VerifyFailed)
 }
 
-/// The §11 fusability invariant. An event may be fused into an inference iff it
-/// is explicitly marked `synthetic` **or** it carries a signature that verifies.
+/// Legacy §11 fusability helper for simulation and compatibility tooling.
+///
+/// This function verifies cryptographic integrity against the public key
+/// carried by the event itself. It does **not** establish that the signer is a
+/// trusted sensor, enforce sensor-to-key binding, check freshness or reject
+/// replay. Never use it as a production authorization decision. Use
+/// [`TrustVerifier::verify_and_record_at`] instead.
 #[must_use]
 pub fn is_fusable(event: &FieldEvent) -> bool {
     if event.provenance.synthetic {
@@ -226,6 +260,32 @@ mod tests {
                 signer_pubkey_hex: None,
             },
         )
+    }
+
+    #[test]
+    fn non_ascii_public_key_is_rejected_without_panicking() {
+        let signer = Signer::from_seed(&[41; 32]);
+        let mut event = sample_event();
+        signer.sign_event(&mut event).unwrap();
+        event.provenance.signer_pubkey_hex = Some("€".repeat(22));
+
+        assert!(matches!(
+            verify_event(&event),
+            Err(ProvenanceError::BadEncoding(_))
+        ));
+    }
+
+    #[test]
+    fn non_ascii_signature_is_rejected_without_panicking() {
+        let signer = Signer::from_seed(&[42; 32]);
+        let mut event = sample_event();
+        signer.sign_event(&mut event).unwrap();
+        event.provenance.signature_hex = Some("€".repeat(44));
+
+        assert!(matches!(
+            verify_event(&event),
+            Err(ProvenanceError::BadEncoding(_))
+        ));
     }
 
     #[test]

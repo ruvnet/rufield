@@ -6,19 +6,25 @@
 //!   cargo run -p rufield-viewer -- --seed 7 --tick-ms 200
 //!   cargo run -p rufield-viewer -- --no-loop     # stop stream at end of demo
 //!
-//! Usage (live — consume a real RuField upstream, ADR-262 P3):
-//!   cargo run -p rufield-viewer -- --source live --upstream http://127.0.0.1:8080
+//! Usage (live — ADR-261 trust over the ADR-262 P3 transport):
+//!   cargo run -p rufield-viewer -- --source live --upstream http://127.0.0.1:8080 \
+//!     --sensor-key sensor_room_01=<ed25519-public-key-hex>
 //!
 //! Env overrides: `RUFIELD_VIEWER_PORT`, `RUFIELD_VIEWER_SEED`,
 //! `RUFIELD_VIEWER_TICK_MS`, `RUFIELD_VIEWER_SOURCE` (`synthetic`|`live`),
-//! `RUFIELD_VIEWER_UPSTREAM`, `RUFIELD_VIEWER_POLL_MS`.
+//! `RUFIELD_VIEWER_UPSTREAM`, `RUFIELD_VIEWER_POLL_MS`,
+//! `RUFIELD_VIEWER_SENSOR_KEYS` (comma-separated `sensor=key` bindings), and
+//! `RUFIELD_VIEWER_TRUST_MODE` (`production`|`captured_replay`).
 //!
 //! In SYNTHETIC mode everything served is simulated — there is no hardware. In
-//! LIVE mode the viewer renders ONLY receipt-verified events from the upstream;
+//! LIVE mode fuses ONLY events accepted by the enrolled sensor trust policy;
 //! if the upstream is unreachable it shows DISCONNECTED, never synthetic data.
 
+use rufield_provenance::{
+    TrustPolicy, TrustedKeyRegistry, DEFAULT_MAX_EVENT_AGE_NS, DEFAULT_MAX_FUTURE_SKEW_NS,
+};
 use rufield_viewer::{
-    app, SourceMode, ViewerConfig, DEFAULT_POLL_MS, DEFAULT_SEED, DEFAULT_TICK_MS,
+    app, LiveTrustConfig, SourceMode, ViewerConfig, DEFAULT_POLL_MS, DEFAULT_SEED, DEFAULT_TICK_MS,
 };
 
 #[tokio::main]
@@ -65,14 +71,33 @@ async fn main() {
         }
     };
 
+    let live_trust = if source.is_live() {
+        match live_trust_config(&args) {
+            Ok(config) => Some(config),
+            Err(error) => {
+                eprintln!("invalid live trust configuration: {error}");
+                std::process::exit(2);
+            }
+        }
+    } else {
+        None
+    };
+
     let config = ViewerConfig {
         seed,
         tick_ms,
         loop_stream,
         source: source.clone(),
         poll_ms,
+        live_trust,
     };
-    let router = app(config);
+    let router = match app(config) {
+        Ok(router) => router,
+        Err(error) => {
+            eprintln!("viewer configuration rejected: {error}");
+            std::process::exit(2);
+        }
+    };
 
     let addr = format!("127.0.0.1:{port}");
     let listener = match tokio::net::TcpListener::bind(&addr).await {
@@ -89,10 +114,12 @@ async fn main() {
             println!("  seed={seed}  tick_ms={tick_ms}  loop={loop_stream}");
         }
         SourceMode::Live { upstream } => {
-            println!("RuField MFS viewer (LIVE — ingesting {upstream}, ADR-262 P3)");
+            println!(
+                "RuField MFS viewer (LIVE — ingesting {upstream}, ADR-262 P3 transport; ADR-261 trust)"
+            );
             println!("  upstream={upstream}  poll_ms={poll_ms}");
             println!(
-                "  receipts verified on ingest; unreachable ⇒ DISCONNECTED (no synthetic fallback)"
+                "  enrolled sensor trust enforced; unreachable ⇒ DISCONNECTED (no synthetic fallback)"
             );
         }
     }
@@ -112,4 +139,99 @@ fn arg_value(args: &[String], flag: &str) -> Option<String> {
         .position(|a| a == flag)
         .and_then(|i| args.get(i + 1))
         .cloned()
+}
+
+fn arg_values(args: &[String], flag: &str) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .filter_map(|(index, value)| {
+            if value == flag {
+                args.get(index + 1).cloned()
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+fn live_trust_config(args: &[String]) -> Result<LiveTrustConfig, String> {
+    let mode = arg_value(args, "--trust-mode")
+        .or_else(|| std::env::var("RUFIELD_VIEWER_TRUST_MODE").ok())
+        .unwrap_or_else(|| "production".into());
+
+    let mut bindings = arg_values(args, "--sensor-key");
+    if let Ok(encoded) = std::env::var("RUFIELD_VIEWER_SENSOR_KEYS") {
+        bindings.extend(
+            encoded
+                .split(',')
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+        );
+    }
+    if bindings.is_empty() {
+        return Err(
+            "at least one --sensor-key sensor_id=public_key_hex binding is required".into(),
+        );
+    }
+
+    let mut registry = TrustedKeyRegistry::new();
+    for binding in bindings {
+        let (sensor, key) = binding.split_once('=').ok_or_else(|| {
+            format!("invalid sensor-key binding {binding:?}; expected sensor=key")
+        })?;
+        registry
+            .enroll_sensor_key(sensor, key)
+            .map_err(|error| error.to_string())?;
+    }
+
+    let policy = match mode.as_str() {
+        "production" => {
+            let max_age_ns = duration_override_ns(
+                args,
+                "--max-event-age-ms",
+                "RUFIELD_VIEWER_MAX_EVENT_AGE_MS",
+                DEFAULT_MAX_EVENT_AGE_NS,
+            )?;
+            let future_skew_ns = duration_override_ns(
+                args,
+                "--max-future-skew-ms",
+                "RUFIELD_VIEWER_MAX_FUTURE_SKEW_MS",
+                DEFAULT_MAX_FUTURE_SKEW_NS,
+            )?;
+            TrustPolicy::production_with_window(max_age_ns, future_skew_ns)
+        }
+        "captured_replay" => TrustPolicy::captured_replay(),
+        "simulation" => {
+            return Err("simulation trust mode is forbidden for a live source".into());
+        }
+        other => {
+            return Err(format!(
+                "unknown trust mode {other:?}; expected production or captured_replay"
+            ));
+        }
+    };
+
+    Ok(LiveTrustConfig {
+        policy,
+        registry,
+        replay_state: None,
+    })
+}
+
+fn duration_override_ns(
+    args: &[String],
+    flag: &str,
+    environment: &str,
+    default_ns: u64,
+) -> Result<u64, String> {
+    let Some(value) = arg_value(args, flag).or_else(|| std::env::var(environment).ok()) else {
+        return Ok(default_ns);
+    };
+    let milliseconds = value
+        .parse::<u64>()
+        .map_err(|_| format!("{flag} must be an unsigned integer"))?;
+    milliseconds
+        .checked_mul(1_000_000)
+        .ok_or_else(|| format!("{flag} is too large"))
 }

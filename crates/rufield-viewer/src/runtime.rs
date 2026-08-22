@@ -51,15 +51,16 @@ pub struct ReceiptView {
     pub signature_hex: Option<String>,
     /// Hex ed25519 signer public key, if present.
     pub signer_pubkey_hex: Option<String>,
-    /// Whether the signature verifies against the event (`verify_event`).
+    /// Whether integrity verification and the active source trust policy accept
+    /// this event. In simulation this is raw signature verification.
     pub verified: bool,
-    /// Whether the event passes the §11 fusability invariant.
+    /// Whether the active source trust policy permits fusion.
     pub fusable: bool,
 }
 
 impl ReceiptView {
-    /// Build a receipt view from an event, computing the verified ✓/✗ and
-    /// §11-fusable flags. Shared by the synthetic and live-ingest paths.
+    /// Build a simulation receipt view from an event, computing detached
+    /// signature verification and the legacy §11 simulation fusability flag.
     #[must_use]
     pub fn from_event(ev: &FieldEvent) -> Self {
         ReceiptView {
@@ -72,6 +73,26 @@ impl ReceiptView {
             signer_pubkey_hex: ev.provenance.signer_pubkey_hex.clone(),
             verified: verify_event(ev).is_ok(),
             fusable: is_fusable(ev),
+        }
+    }
+
+    /// Build a live receipt view from a production trust decision.
+    ///
+    /// Unlike [`Self::from_event`], this never calls the legacy stateless
+    /// fusability helper. A self-signed but unenrolled event therefore renders
+    /// as rejected even when its detached signature is mathematically valid.
+    #[must_use]
+    pub fn from_live_decision(ev: &FieldEvent, accepted: bool) -> Self {
+        ReceiptView {
+            raw_hash: ev.provenance.raw_hash.clone(),
+            firmware_hash: ev.provenance.firmware_hash.clone(),
+            model_id: ev.provenance.model_id.clone(),
+            calibration_id: ev.provenance.calibration_id.clone(),
+            synthetic: ev.provenance.synthetic,
+            signature_hex: ev.provenance.signature_hex.clone(),
+            signer_pubkey_hex: ev.provenance.signer_pubkey_hex.clone(),
+            verified: accepted,
+            fusable: accepted,
         }
     }
 }

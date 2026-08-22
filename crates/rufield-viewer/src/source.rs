@@ -1,5 +1,5 @@
 //! The viewer's **data source selector** and the live-ingest runtime
-//! (ADR-260 §27.9 + ADR-262 P3).
+//! (ADR-260 §27.9 and ADR-261 trust policy; ADR-262 P3 transport).
 //!
 //! The viewer can be driven from one of two sources:
 //!
@@ -7,8 +7,8 @@
 //!   `SyntheticSim → RuFieldFusion` pipeline. Banner: `SYNTHETIC`.
 //! - [`SourceMode::Live`] — consumes **real** `rufield_core::FieldEvent`s from
 //!   an external upstream (RuView's `/ws/field` / `/api/field`, ADR-262 P3),
-//!   verifies each event's provenance receipt on ingest, and feeds the verified
-//!   events through the *same* fusion/inference display path. Banner: `LIVE`
+//!   authorizes each event through an injected production trust registry, and
+//!   feeds accepted events through a persistent production fusion engine. Banner: `LIVE`
 //!   when connected, `DISCONNECTED` when the upstream is unreachable.
 //!
 //! ## Banner honesty (the whole point)
@@ -28,12 +28,12 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use tokio::sync::broadcast;
 
-use crate::live::{frame_from_api_payload, frame_from_ws_event, LiveFrame};
+use crate::live::{frame_from_api_payload, frame_from_ws_event, LiveFrame, LiveProcessor};
 
 /// Default upstream poll interval (ms) when subscribing the `/api/field` ring.
 pub const DEFAULT_POLL_MS: u64 = 500;
@@ -90,7 +90,7 @@ impl SourceMode {
 pub enum BannerState {
     /// `SYNTHETIC — simulated sensors, no hardware`.
     Synthetic,
-    /// `LIVE — <upstream>` (real upstream events, receipt-verified).
+    /// `LIVE — <upstream>` (real upstream events, policy-authorized).
     Live {
         /// The upstream base URL.
         upstream: String,
@@ -180,23 +180,39 @@ pub fn banner_for(mode: &SourceMode, live: Option<&LiveState>) -> BannerState {
 /// Spawn the background live-ingest task. It tries the `/ws/field` SSE stream
 /// first (preferred — one event per cycle, push); if that cannot be opened it
 /// falls back to polling `/api/field` on [`DEFAULT_POLL_MS`]. Each decoded batch
-/// becomes a [`LiveFrame`] (with on-ingest receipt verification) and is
-/// broadcast to all connected dashboards. Connectivity is reflected into
-/// `state` so the banner can show LIVE vs DISCONNECTED honestly.
+/// becomes a [`LiveFrame`] after trust authorization and fail-closed privacy
+/// projection, then is broadcast to connected dashboards. Raw upstream events
+/// never enter the broadcast channel. Connectivity is reflected into `state`
+/// so the banner can show LIVE vs DISCONNECTED honestly.
+///
+/// Replay watermarks remain in this task-owned processor across reconnects.
+/// Surviving a viewer process restart additionally requires the host to export
+/// replay state atomically and inject it through [`crate::live::LiveTrustConfig`]
+/// before this task starts. The reference binary does not yet provide that
+/// durable storage adapter.
 ///
 /// Returns the broadcast receiver factory (via the returned `Sender`).
-pub fn spawn_ingest(state: Arc<LiveState>, poll_ms: u64) -> broadcast::Sender<LiveFrame> {
+pub fn spawn_ingest(
+    state: Arc<LiveState>,
+    poll_ms: u64,
+    processor: LiveProcessor,
+) -> broadcast::Sender<LiveFrame> {
     let (tx, _rx) = broadcast::channel::<LiveFrame>(256);
     let tx_task = tx.clone();
     tokio::spawn(async move {
-        ingest_loop(state, poll_ms.max(1), tx_task).await;
+        ingest_loop(state, poll_ms.max(1), tx_task, processor).await;
     });
     tx
 }
 
 /// The ingest loop: prefer `/ws/field` SSE, fall back to `/api/field` polling,
 /// retrying forever with a short backoff and keeping `state.connected` honest.
-async fn ingest_loop(state: Arc<LiveState>, poll_ms: u64, tx: broadcast::Sender<LiveFrame>) {
+async fn ingest_loop(
+    state: Arc<LiveState>,
+    poll_ms: u64,
+    tx: broadcast::Sender<LiveFrame>,
+    mut processor: LiveProcessor,
+) {
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -210,14 +226,14 @@ async fn ingest_loop(state: Arc<LiveState>, poll_ms: u64, tx: broadcast::Sender<
 
     loop {
         // Prefer the push stream. If it opens, consume it until it ends/errors.
-        match stream_ws(&client, &ws_url, &state, &tx, &mut tick).await {
+        match stream_ws(&client, &ws_url, &state, &tx, &mut tick, &mut processor).await {
             Ok(consumed) if consumed > 0 => {
                 // Stream ended after delivering frames; loop and reconnect.
                 continue;
             }
             _ => {
                 // SSE not available — fall back to polling the ring once.
-                if poll_api_once(&client, &api_url, &state, &tx, &mut tick).await {
+                if poll_api_once(&client, &api_url, &state, &tx, &mut tick, &mut processor).await {
                     // Connected via poll; pace before the next poll.
                 } else {
                     state.set_connected(false);
@@ -237,6 +253,7 @@ async fn stream_ws(
     state: &LiveState,
     tx: &broadcast::Sender<LiveFrame>,
     tick: &mut usize,
+    processor: &mut LiveProcessor,
 ) -> Result<usize, ()> {
     use futures_util::StreamExt;
 
@@ -260,7 +277,7 @@ async fn stream_ws(
             let raw = buf[..pos].to_string();
             buf.drain(..pos + 2);
             if let Some(data) = parse_sse_data(&raw) {
-                if let Ok(frame) = frame_from_ws_event(*tick, &data) {
+                if let Ok(frame) = frame_from_ws_event(processor, *tick, &data, unix_now_ns()) {
                     *tick += 1;
                     delivered += 1;
                     let _ = tx.send(frame);
@@ -299,6 +316,7 @@ async fn poll_api_once(
     state: &LiveState,
     tx: &broadcast::Sender<LiveFrame>,
     tick: &mut usize,
+    processor: &mut LiveProcessor,
 ) -> bool {
     let body = match client.get(url).send().await {
         Ok(r) if r.status().is_success() => match r.text().await {
@@ -307,7 +325,7 @@ async fn poll_api_once(
         },
         _ => return false,
     };
-    match frame_from_api_payload(*tick, &body) {
+    match frame_from_api_payload(processor, *tick, &body, unix_now_ns()) {
         Ok(frame) => {
             *tick += 1;
             state.set_connected(true);
@@ -321,6 +339,13 @@ async fn poll_api_once(
             false
         }
     }
+}
+
+fn unix_now_ns() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

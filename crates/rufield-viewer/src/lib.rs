@@ -10,12 +10,10 @@
 //!
 //! ## Honesty (non-negotiable)
 //!
-//! Everything this viewer shows is **SYNTHETIC** — produced by a deterministic
-//! simulator. There is **no hardware**, no live sensor, and no live camera.
-//! This is a *demo viewer*, not a device-management console: in v0.1 there are
-//! no real devices to manage. Fleet / real-adapter integration is a separate,
-//! later milestone. The dashboard renders a persistent
-//! `SYNTHETIC — simulated sensors, no hardware` banner that cannot be dismissed.
+//! Synthetic mode is the default and is always visibly labeled. Live mode is
+//! fail closed: it requires an independently injected sensor-key registry and
+//! a production or captured-replay trust policy before its ingest task starts.
+//! Live mode never falls back to simulation.
 //!
 //! ## What it serves
 //!
@@ -23,15 +21,16 @@
 //! - `GET /app.js`   — the vanilla-JS dashboard logic.
 //! - `GET /health`   — liveness JSON.
 //! - `GET /api/run`  — the full deterministic run as JSON (non-streaming).
-//! - `GET /events`   — Server-Sent Events: each tick frame + its inferences,
-//!   paced at a watchable cadence; loops or stops cleanly.
+//! - `GET /events`   — Server-Sent Events. Synthetic frames retain demo
+//!   receipts. Live frames are a privacy-guarded public projection with stable
+//!   trust diagnostics and no upstream direct identifiers or receipt material.
 //!
 //! ## Run it
 //!
 //! ```no_run
 //! # async fn run() {
 //! use rufield_viewer::{app, ViewerConfig};
-//! let router = app(ViewerConfig::default());
+//! let router = app(ViewerConfig::default()).unwrap();
 //! let listener = tokio::net::TcpListener::bind("127.0.0.1:8088").await.unwrap();
 //! axum::serve(listener, router).await.unwrap();
 //! # }
@@ -45,10 +44,14 @@ pub mod server;
 pub mod source;
 
 pub use live::{
-    frame_from_api_payload, frame_from_events, frame_from_ws_event, ApiFieldPayload, LiveFrame,
+    frame_from_api_payload, frame_from_events, frame_from_ws_event, ApiFieldPayload,
+    LiveEventDetails, LiveEventView, LiveFrame, LiveInferenceView, LivePrivacyDisposition,
+    LiveProcessor, LiveTickFrame, LiveTrustConfig, LiveTrustDecisionView, LiveTrustRejectionCode,
 };
 pub use runtime::{
     build_run, EventView, InferenceView, PrivacyBadge, ReceiptView, RunData, TickFrame,
 };
-pub use server::{app, app_no_ingest, AppState, ViewerConfig, DEFAULT_SEED, DEFAULT_TICK_MS};
+pub use server::{
+    app, app_no_ingest, AppState, ViewerConfig, ViewerConfigError, DEFAULT_SEED, DEFAULT_TICK_MS,
+};
 pub use source::{banner_for, BannerState, LiveState, SourceMode, DEFAULT_POLL_MS};

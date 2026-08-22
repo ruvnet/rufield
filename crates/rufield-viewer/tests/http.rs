@@ -11,7 +11,7 @@ use rufield_viewer::{app, app_no_ingest, SourceMode, ViewerConfig};
 use tower::ServiceExt;
 
 async fn get(path: &str) -> (StatusCode, String) {
-    let router = app(ViewerConfig::default());
+    let router = app(ViewerConfig::default()).unwrap();
     let resp = router
         .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
         .await
@@ -135,7 +135,8 @@ async fn events_stream_emits_meta_then_frames_in_order() {
         tick_ms: 1,
         loop_stream: false,
         ..ViewerConfig::default()
-    });
+    })
+    .unwrap();
     let resp = router
         .oneshot(
             Request::builder()
@@ -161,7 +162,8 @@ async fn events_stream_emits_meta_then_frames_in_order() {
         tick_ms: 1,
         loop_stream: false,
         ..ViewerConfig::default()
-    });
+    })
+    .unwrap();
     let resp2 = router2
         .oneshot(
             Request::builder()
@@ -179,8 +181,9 @@ async fn events_stream_emits_meta_then_frames_in_order() {
 }
 
 // ---------------------------------------------------------------------------
-// Live-ingest mode (ADR-262 P3). No real RuView upstream runs in this env, so
-// these use `app_no_ingest` to assert the config/banner contract synchronously.
+// Live-ingest trust (ADR-261; external ADR-262 P3 transport). No real RuView
+// upstream runs in this env, so these use `app_no_ingest` to assert the
+// config/banner contract synchronously.
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -208,6 +211,14 @@ async fn live_source_reports_live_not_synthetic() {
         !label.contains("SYNTHETIC"),
         "live mode must never show SYNTHETIC"
     );
+}
+
+#[tokio::test]
+async fn live_app_fails_closed_without_trust_registry() {
+    assert!(matches!(
+        app(live_config()),
+        Err(rufield_viewer::ViewerConfigError::MissingLiveTrust)
+    ));
 }
 
 #[tokio::test]

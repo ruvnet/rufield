@@ -61,12 +61,12 @@ The full specification of record is
 | Crate | Description |
 |-------|-------------|
 | [`rufield-core`](crates/rufield-core) | Data model + traits: `Modality` (15), `FieldAxis`, `FieldTensor`, `PrivacyClass` (P0–P5), `FieldEvent`, `Observation`, `CalibrationReceipt`, `FieldInference`, and the `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. |
-| [`rufield-provenance`](crates/rufield-provenance) | Real `sha256` content hashing + `ed25519` sign/verify, and the §11 fusability invariant (`is_fusable`). |
+| [`rufield-provenance`](crates/rufield-provenance) | Real `sha256` content hashing + `ed25519` sign/verify. ADR-261 adds explicit simulation, captured-replay, and production trust policies, an independently enrolled sensor-key registry, revocation, freshness checks, and persistent replay watermarks. The legacy `is_fusable` helper is simulation-only. |
 | [`rufield-privacy`](crates/rufield-privacy) | `PrivacyClass` policy + `DefaultPrivacyGuard`: P0 edge-only, network ≤ P2, P4 consent gate, P5 identity binding. |
 | [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter (camera-free room-intelligence demo across 3 modalities) **plus `CsiReplayAdapter`** — the first real (non-synthetic) adapter, replaying real captured WiFi CSI from a `.csi.jsonl` recording (replay, unlabeled). |
 | [`rufield-fusion`](crates/rufield-fusion) | `FusionGraph` + `RuFieldFusion` engine with TOML rules (weighted-Bayes / temporal-window), confidence + expiry. |
 | [`rufield-bench`](crates/rufield-bench) | Deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations, and the ADR-260 §31 acceptance test. |
-| [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): room state, event log with privacy badges, fusion graph, signed-receipt viewer. **Two sources** — `--source synthetic` (default) replays `SyntheticSim → RuFieldFusion`; `--source live --upstream <URL>` ingests **real** `FieldEvent`s from a RuField upstream (RuView `/ws/field` / `/api/field`, ADR-262 P3), verifying each receipt on ingest. Honest, mutually-exclusive `SYNTHETIC` / `LIVE` / `DISCONNECTED` banner. Not a device-management console. |
+| [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): room state, event log with privacy badges, fusion graph, and a synthetic-mode signed-receipt viewer. **Two sources** — `--source synthetic` (default) replays `SyntheticSim → RuFieldFusion`; `--source live --upstream <URL>` ingests **real** `FieldEvent`s over the RuView `/ws/field` / `/api/field` transport (ADR-262 P3). Live startup requires an independently enrolled sensor-key registry and an ADR-261 production or captured-replay policy. Live SSE uses a fail-closed public projection with stable trust diagnostics and no event/device/zone ids, raw labels, hashes, signer keys, signatures, model ids, or provenance edges. Honest, mutually-exclusive `SYNTHETIC` / `LIVE` / `DISCONNECTED` banner. Not a device-management console. |
 
 ## Install / Quickstart
 
@@ -110,7 +110,7 @@ Endpoints: `GET /` (page), `GET /events` (Server-Sent Events stream),
 `GET /api/run` (full deterministic run as JSON), `GET /api/source` (the
 data-source selector + banner state), `GET /health`.
 
-### Live mode — consume a real RuField feed (ADR-262 P3)
+### Live mode — ADR-261 trust over the ADR-262 P3 transport
 
 The same dashboard can display **real** `FieldEvent`s streamed from an external
 upstream (RuView's `wifi-densepose-sensing-server`, which exposes `GET /api/field`
@@ -120,29 +120,50 @@ and `GET /ws/field` per ADR-262 P3) instead of the built-in synthetic simulator:
 # Default: SYNTHETIC (simulator replay)
 cargo run -p rufield-viewer -- --source synthetic
 
-# LIVE: ingest a real RuField upstream
-cargo run -p rufield-viewer -- --source live --upstream http://127.0.0.1:8080
+# LIVE: replace SENSOR_PUBLIC_KEY_HEX with the independently enrolled key
+cargo run -p rufield-viewer -- --source live \
+  --upstream http://127.0.0.1:8080 \
+  --sensor-key sensor_room_01=SENSOR_PUBLIC_KEY_HEX
 ```
 
 Env equivalents: `RUFIELD_VIEWER_SOURCE` (`synthetic`|`live`),
-`RUFIELD_VIEWER_UPSTREAM`, `RUFIELD_VIEWER_POLL_MS`. **The default stays
+`RUFIELD_VIEWER_UPSTREAM`, `RUFIELD_VIEWER_POLL_MS`,
+`RUFIELD_VIEWER_SENSOR_KEYS` (comma-separated `sensor=key` bindings), and
+`RUFIELD_VIEWER_TRUST_MODE` (`production` by default, or `captured_replay`).
+Production freshness can be tightened with `RUFIELD_VIEWER_MAX_EVENT_AGE_MS`
+and `RUFIELD_VIEWER_MAX_FUTURE_SKEW_MS`. **The source default stays
 SYNTHETIC.**
 
 In live mode the viewer subscribes to the upstream's `/ws/field` SSE stream
-(falling back to polling `/api/field`), **verifies each event's provenance
-receipt on ingest** (`rufield_provenance::is_fusable`), and runs the verified
-events through the *same* fusion/inference display path. The dashboard panels
-(room state / privacy badges / fusion graph / receipt modal) are identical — only
-the data source changes. Each event shows a per-event verified ✓/✗ badge;
-**unverified (forged/tampered) events are flagged and never fused into trusted
-inferences.**
+(falling back to polling `/api/field`) and authorizes every event through a
+persistent `TrustVerifier` before fusion state can change. The trust registry
+must be provisioned independently from the event stream. Production and
+captured-replay modes both reject synthetic events, unknown self-signed keys,
+revoked keys, sensor/key binding mismatches, malformed signatures, and replay;
+production additionally enforces stale/future timestamp bounds. Rejected
+events are flagged and never fused. The same `LiveProcessor` and replay
+watermarks survive upstream batches and reconnects within the running process.
+
+Before a live frame enters the broadcast channel, the default network privacy
+guard builds a redacted public projection. It never emits upstream event,
+device, or zone identifiers; observation labels; receipt hashes; signer keys;
+signatures; model or calibration identifiers; or supporting-event edges.
+Rejected events remain operationally visible through stable, non-identifying
+reason codes such as `unknown_key` or `signature_verification_failed`. P0, P3,
+P4, and P5 details are withheld by default; P4 requires consent and P5 requires
+identity binding before any future policy could release them.
+
+The reference viewer binary can accept restored replay state programmatically,
+but it does not yet atomically persist updated watermarks. A process restart
+therefore requires an operator-provided integrity-protected persistence adapter
+to retain replay rejection across restarts.
 
 > **Banner honesty (non-negotiable):** the banner reflects *exactly* what is being
 > shown, and the three states are mutually exclusive and visually distinct:
 >
 > - **`SYNTHETIC — simulated sensors, no hardware`** (amber) — synthetic mode.
 > - **`LIVE — <upstream>`** (green) — live mode, actually receiving
->   receipt-verified upstream events.
+>   policy-authorized upstream events.
 > - **`DISCONNECTED — <upstream> unreachable`** (red) — live mode selected but the
 >   upstream cannot be reached. The viewer shows this explicitly and **never**
 >   falls back to synthetic data under a LIVE banner (or vice versa).
@@ -178,10 +199,10 @@ use rufield_provenance::is_fusable;
 let config = SimConfig { seed: 2026, ..SimConfig::default() };
 let events = run_demo(&config);
 
-// 2. Feed events into the fusion engine; it rejects any non-fusable event.
+// 2. This deterministic demo deliberately uses the simulation-only policy.
 let mut engine = RuFieldFusion::new();
 for se in &events {
-    assert!(is_fusable(&se.event)); // §11 invariant: receipt OR synthetic
+    assert!(is_fusable(&se.event)); // compatibility helper: simulation only
     engine.ingest(se.event.clone()).unwrap();
 }
 
@@ -219,9 +240,10 @@ emits a signed `FieldEvent` per frame — which feeds the same `RuFieldFusion`
 engine as the synthetic stream.
 
 ```rust
-use rufield_adapters::CsiReplayAdapter;
+use rufield_adapters::{CsiReplayAdapter, REPLAY_SIGNER_SEED};
 use rufield_core::{FieldAdapter, FusionEngine, InferenceQuery};
 use rufield_fusion::RuFieldFusion;
+use rufield_provenance::{Signer, TrustPolicy, TrustVerifier, TrustedKeyRegistry};
 
 // Real captured WiFi CSI, replayed from a recording file (not live hardware).
 let jsonl = std::fs::read_to_string("recording.csi.jsonl")?;
@@ -231,11 +253,16 @@ let mut adapter = CsiReplayAdapter::from_jsonl(&jsonl)?;
 let receipt = adapter.calibrate("living_room")?;
 println!("calibration: {} ({})", receipt.calibration_id, receipt.data_hash);
 
-// Stream events through the fusion engine. Each event carries a REAL sha256
-// over the raw subcarrier bytes + a real ed25519 signature (replay key).
-let mut engine = RuFieldFusion::new();
+// Configure captured-replay trust independently from incoming events. This
+// fixture key is deterministic; production deployments provision keys through
+// an authenticated control plane instead.
+let signer = Signer::from_seed(&REPLAY_SIGNER_SEED);
+let mut registry = TrustedKeyRegistry::new();
+registry.enroll_sensor_key("csi_replay_node_01", &signer.public_hex())?;
+let trust = TrustVerifier::new(TrustPolicy::captured_replay(), registry);
+let mut engine = RuFieldFusion::with_trust_verifier(trust);
 while let Some(event) = adapter.next_event()? {
-    engine.ingest(event)?;          // §11: verified receipt, not the synthetic hatch
+    engine.ingest(event)?;
     for inf in engine.infer(&InferenceQuery::all())? {
         println!("{} conf={:.2} privacy={:?}", inf.label, inf.confidence, inf.privacy_class);
     }
@@ -365,10 +392,16 @@ audit log**.
 > **No fused inference is valid unless every contributing event has a
 > provenance receipt or is explicitly marked synthetic.**
 
-`rufield-provenance` enforces this with real `sha256` content hashing and
-`ed25519` signatures. `is_fusable(&event)` returns true iff the event is
-flagged `synthetic` **or** carries a signature that verifies. Tampering with
-any field after signing makes verification (and fusability) fail.
+`rufield-provenance` enforces integrity with real `sha256` content hashing and
+`ed25519` signatures. The compatibility helper `is_fusable(&event)` implements
+the original rule only for simulation: it accepts an explicitly synthetic
+event or a signature that verifies against the event-carried key.
+
+Captured replay and production use the ADR-261 stateful `TrustVerifier`
+instead. Those modes reject synthetic evidence and require a key enrolled and
+bound to the sensor independently of the event. They also enforce revocation
+and monotonic replay watermarks; production adds stale/future time bounds. All
+checks pass before either replay or fusion state is mutated.
 
 ## Spec / ADR
 
