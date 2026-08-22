@@ -1,7 +1,7 @@
 //! # rufield-bench
 //!
-//! Deterministic benchmark runner for RuField MFS v0.1 (ADR-260 §18 / §27 /
-//! §31). Streams the `SyntheticSim` demo through the fusion engine and scores:
+//! Benchmark and evidence promotion runner for RuField MFS. The legacy path
+//! streams the `SyntheticSim` demo through the fusion engine and scores:
 //!
 //! - per-task **F1** vs the simulator's ground-truth labels (**SYNTHETIC** —
 //!   not field accuracy),
@@ -9,17 +9,43 @@
 //! - **provenance coverage** (% events with a verifiable / synthetic receipt),
 //! - **privacy violations** (events transmitted above the P2 default ceiling).
 //!
-//! The report is deterministic: the same seed yields identical scores
-//! (latency is wall-clock and therefore the only non-deterministic field).
+//! The evidence path parses an explicit capture manifest, constructs separate
+//! room, device, day, session, and participant held out splits, reports field
+//! quality and operations metrics, and rejects fixture or simulation only
+//! promotion. Bundled fixtures are conformance data, never empirical results.
 
 #![doc(html_root_url = "https://docs.rs/rufield-bench/0.1.0")]
 
+pub mod artifacts;
+pub mod evidence;
+pub mod manifest;
 pub mod metrics;
 pub mod report;
 pub mod runner;
+pub mod split;
 
+pub use artifacts::{
+    canonical_attestation_bytes, canonical_bundle_payload_digest, canonical_manifest_digest,
+    canonical_record_digest, verify_local_artifacts, ArtifactReceipt, ArtifactVerificationError,
+    EvidenceAuthority, EvidenceAuthorityAttestation, EvidenceAuthorityRegistry,
+    EvidenceBundleArtifact, EvidenceRecordBinding, IsolationArtifactKind, ModelLineageArtifact,
+    SplitArtifactPlan, SplitIsolationArtifact, SplitSampleAssignment, TrainingMaterialBinding,
+    VerifiedArtifacts, AUTHORITY_REGISTRY_SCHEMA_VERSION, EVIDENCE_ATTESTATION_SCHEMA_VERSION,
+    EVIDENCE_BUNDLE_SCHEMA_VERSION, MODEL_LINEAGE_SCHEMA_VERSION, SPLIT_ARTIFACT_SCHEMA_VERSION,
+};
+pub use evidence::{
+    build_evidence_report, evaluate_promotion, evaluate_promotion_with_artifacts, DiversityCounts,
+    EvidenceReport, GateFailure, PromotionDecision, PromotionPolicy, PROMOTION_POLICY_ID,
+};
+pub use manifest::{
+    CollectionKind, EvidenceManifest, EvidenceOrigin, EvidenceRecord, ManifestError,
+    EVIDENCE_SCHEMA_VERSION,
+};
 pub use report::{BenchReport, TaskScore};
 pub use runner::run;
+pub use split::{
+    build_split_plans, represented_folds, validate_no_leakage, SplitAxis, SplitError, SplitPlan,
+};
 
 #[cfg(test)]
 mod acceptance {

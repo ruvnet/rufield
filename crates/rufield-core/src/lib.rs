@@ -23,7 +23,10 @@ pub mod traits;
 
 pub use error::CoreError;
 pub use event::{CalibrationReceipt, FieldEvent, Observation, ProvenanceRef, SensorDescriptor};
-pub use inference::{FieldEmbedding, FieldInference, InferenceQuery};
+pub use inference::{
+    AbstentionReason, CalibratedInference, CalibrationContext, FieldEmbedding, FieldInference,
+    InferenceQuery, PredictionInterval, PredictionSet, UncertaintyEnvelope,
+};
 pub use modality::{FieldAxis, Modality};
 pub use privacy::PrivacyClass;
 pub use tensor::{FieldTensor, SPEC_VERSION};

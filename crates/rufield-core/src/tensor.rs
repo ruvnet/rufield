@@ -66,15 +66,27 @@ impl FieldTensor {
     }
 
     /// Number of elements implied by `shape` (1 for a scalar / empty shape).
+    /// Returns `usize::MAX` on positive overflow rather than panicking. Call
+    /// [`FieldTensor::validate`] for the authoritative checked result.
     #[must_use]
     pub fn element_count(&self) -> usize {
-        self.shape.iter().product()
+        self.shape
+            .iter()
+            .copied()
+            .fold(1usize, usize::saturating_mul)
     }
 
     /// Validate the structural invariants:
     /// `shape.product() == values.len()` and `axes.len() == shape.len()`.
     pub fn validate(&self) -> Result<(), CoreError> {
-        let expected = self.element_count();
+        let expected = if self.shape.contains(&0) {
+            0
+        } else {
+            self.shape
+                .iter()
+                .try_fold(1usize, |count, dimension| count.checked_mul(*dimension))
+                .ok_or(CoreError::ShapeElementCountOverflow)?
+        };
         if expected != self.values.len() {
             return Err(CoreError::ShapeMismatch {
                 expected,
@@ -148,5 +160,27 @@ mod tests {
         )
         .unwrap_err();
         matches!(err, CoreError::AxisRankMismatch { .. });
+    }
+
+    #[test]
+    fn overflowing_shape_rejects_without_panicking() {
+        let tensor = FieldTensor {
+            spec_version: SPEC_VERSION.into(),
+            timestamp_ns: 1,
+            modality: Modality::WifiCsi,
+            axes: vec![FieldAxis::Time, FieldAxis::Frequency],
+            shape: vec![usize::MAX, 2],
+            values: vec![],
+            confidence: 0.9,
+            noise_floor: 0.0,
+            calibration_id: None,
+            privacy_class: PrivacyClass::P0,
+        };
+        let validation = std::panic::catch_unwind(|| tensor.validate());
+        assert_eq!(
+            validation.unwrap(),
+            Err(CoreError::ShapeElementCountOverflow)
+        );
+        assert_eq!(tensor.element_count(), usize::MAX);
     }
 }

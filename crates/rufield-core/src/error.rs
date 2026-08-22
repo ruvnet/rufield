@@ -19,6 +19,8 @@ pub enum CoreError {
         /// Rank of the shape.
         rank: usize,
     },
+    /// Tensor shape dimensions overflow the platform element count.
+    ShapeElementCountOverflow,
     /// A generic validation failure with a message.
     Invalid(String),
 }
@@ -34,6 +36,9 @@ impl fmt::Display for CoreError {
                 f,
                 "field tensor axis/rank mismatch: {axes} axes for rank-{rank} shape"
             ),
+            CoreError::ShapeElementCountOverflow => {
+                write!(f, "field tensor shape element count overflows usize")
+            }
             CoreError::Invalid(m) => write!(f, "invalid field data: {m}"),
         }
     }
