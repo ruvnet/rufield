@@ -22,7 +22,13 @@ pub mod tensor;
 pub mod traits;
 
 pub use error::CoreError;
-pub use event::{CalibrationReceipt, FieldEvent, Observation, ProvenanceRef, SensorDescriptor};
+pub use event::{
+    channel_sounding_sensor_id, CalibrationReceipt, ChannelSoundingProcedureProvenance,
+    ChannelSoundingStepProvenance, FieldEvent, GatewayEnvelopeProvenance, IdentityEvidence,
+    IdentityEvidenceKind, Observation, ProvenanceRef, PseudonymousId, SensorDescriptor,
+    MAX_CHANNEL_SOUNDING_CHANNELS, MAX_CHANNEL_SOUNDING_CHANNEL_INDEX,
+    MAX_IDENTITY_EVIDENCE_TTL_NS, MIN_CHANNEL_SOUNDING_CHANNELS, MIN_IDENTITY_EVIDENCE_CONFIDENCE,
+};
 pub use inference::{
     AbstentionReason, CalibratedInference, CalibrationContext, FieldEmbedding, FieldInference,
     InferenceQuery, PredictionInterval, PredictionSet, UncertaintyEnvelope,
