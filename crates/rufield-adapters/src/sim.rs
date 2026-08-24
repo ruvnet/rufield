@@ -244,12 +244,7 @@ pub fn default_destination() -> Destination {
 }
 
 fn modality_tag(m: Modality) -> &'static str {
-    match m {
-        Modality::WifiCsi => "wifi_csi",
-        Modality::MmwaveRadar => "mmwave_radar",
-        Modality::InfraredThermal => "infrared_thermal",
-        _ => "synthetic_sim",
-    }
+    m.as_str()
 }
 
 fn synthetic_vendor(m: Modality) -> &'static str {

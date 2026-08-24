@@ -152,6 +152,7 @@ A Field Event is a timestamped observation from any ambient field sensor.
 |   13 | quantum_inertial     | atom interferometer or precision IMU    |
 |   14 | event_camera         | optional visual event stream            |
 |   15 | synthetic_sim        | simulator or replay source              |
+|   16 | ble_advertisement_rssi | RSSI and pseudonymous anchor evidence  |
 
 ## 9. Field Tensor
 
