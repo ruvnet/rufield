@@ -717,18 +717,23 @@ impl BleIdentityEvidenceAdapter {
             &sample.ephemeral_id,
             sample.token_epoch,
         );
-        self.watermark_ns = self.watermark_ns.max(sample.timestamp_ns);
-        self.active
-            .retain(|_, binding| binding.expires_ns > self.watermark_ns);
-        self.last_sequence
-            .retain(|pseudonym, _| self.active.contains_key(pseudonym));
-
         let enrolled_receipt = match &sample.trust {
             BleAnchorTrust::Enrolled { binding_receipt_id } => Some(binding_receipt_id.as_str()),
             BleAnchorTrust::Unverified | BleAnchorTrust::Revoked => None,
         };
 
-        let reason = if sample.track_id.trim().is_empty()
+        // Phase 1 -- everything decidable from the sample alone, evaluated
+        // BEFORE the stream clock moves.
+        //
+        // The watermark used to advance unconditionally at the top of this
+        // function, which meant an `Unverified` or `Revoked` advertisement
+        // carrying a far-future `timestamp_ns` evicted every active binding and
+        // pinned the clock before its own trust was ever examined. The packet
+        // was refused, but every subsequent legitimate sample then abstained as
+        // `Expired`. Untrusted input must not be able to move time, so trust and
+        // shape are settled first and only a surviving sample advances the
+        // watermark.
+        let untrusted_reason = if sample.track_id.trim().is_empty()
             || sample.zone_id.trim().is_empty()
             || !sample.confidence.is_finite()
         {
@@ -739,10 +744,29 @@ impl BleIdentityEvidenceAdapter {
             Some(BleAbstentionReason::Revoked)
         } else if sample.confidence < MIN_IDENTITY_CONFIDENCE || sample.confidence > 1.0 {
             Some(BleAbstentionReason::LowConfidence)
-        } else if sample.ttl_ns == 0
-            || sample.ttl_ns > MAX_IDENTITY_TTL_NS
-            || sample.timestamp_ns.saturating_add(sample.ttl_ns) <= self.watermark_ns
-        {
+        } else if sample.ttl_ns == 0 || sample.ttl_ns > MAX_IDENTITY_TTL_NS {
+            // The self-contained half of the expiry rule. The watermark
+            // comparison stays in phase 2, keeping `Expired` at its original
+            // position in the precedence order.
+            Some(BleAbstentionReason::Expired)
+        } else {
+            None
+        };
+
+        if let Some(reason) = untrusted_reason {
+            self.abstain(sample, pseudonym, reason);
+            return Ok(None);
+        }
+
+        // Phase 2 -- the sample is well-formed and carries enrolled trust, so it
+        // is now allowed to advance the stream clock and retire stale bindings.
+        self.watermark_ns = self.watermark_ns.max(sample.timestamp_ns);
+        self.active
+            .retain(|_, binding| binding.expires_ns > self.watermark_ns);
+        self.last_sequence
+            .retain(|pseudonym, _| self.active.contains_key(pseudonym));
+
+        let reason = if sample.timestamp_ns.saturating_add(sample.ttl_ns) <= self.watermark_ns {
             Some(BleAbstentionReason::Expired)
         } else if !self.active.contains_key(&pseudonym)
             && self.active.len() >= MAX_ACTIVE_IDENTITY_BINDINGS
@@ -775,8 +799,18 @@ impl BleIdentityEvidenceAdapter {
             return Ok(None);
         }
 
-        let BleAnchorTrust::Enrolled { binding_receipt_id } = sample.trust.clone() else {
-            unreachable!("non-enrolled states abstain above");
+        // Phase 1 abstains on every non-enrolled variant, so this is currently
+        // total. It is written as a fallible match rather than `unreachable!`
+        // because that totality is an invariant of the chain above, not
+        // something the compiler checks: adding a `BleAnchorTrust` variant would
+        // compile cleanly and turn a panic into the failure mode. Abstaining is
+        // the fail-closed answer either way.
+        let Some(binding_receipt_id) = (match &sample.trust {
+            BleAnchorTrust::Enrolled { binding_receipt_id } => Some(binding_receipt_id.clone()),
+            _ => None,
+        }) else {
+            self.abstain(sample, pseudonym, BleAbstentionReason::Unverified);
+            return Ok(None);
         };
         if binding_receipt_id.trim().is_empty() {
             self.abstain(sample, pseudonym, BleAbstentionReason::Malformed);
@@ -1503,6 +1537,86 @@ mod tests {
         assert_eq!(
             adapter.abstentions().last().unwrap().reason,
             BleAbstentionReason::Capacity
+        );
+    }
+    fn identity_sample(timestamp_ns: u64, sequence: u32) -> BleIdentitySample {
+        BleIdentitySample {
+            timestamp_ns,
+            ephemeral_id: [1; 8],
+            token_epoch: 7,
+            sequence,
+            track_id: "track_a".into(),
+            zone_id: "room".into(),
+            space_cell: Some([0, 0, 1]),
+            rssi_dbm: -55,
+            confidence: 0.8,
+            ttl_ns: 1_000,
+            trust: BleAnchorTrust::Enrolled {
+                binding_receipt_id: "enrollment_1".into(),
+            },
+        }
+    }
+
+    /// An advertisement is attacker-supplied: anyone can broadcast one with any
+    /// `timestamp_ns`, with no key, enrollment, or signature. If an untrusted
+    /// sample can advance the stream watermark before its trust is examined, one
+    /// frame evicts every active binding and pins the clock, and every later
+    /// legitimate sample abstains as `Expired` -- the packet is refused and the
+    /// honest traffic dies with it. Trust is therefore settled before time moves.
+    #[test]
+    fn an_untrusted_far_future_sample_cannot_expire_legitimate_bindings() {
+        let mut hostile = identity_sample(u64::MAX / 2, 1);
+        hostile.ephemeral_id = [9; 8];
+        hostile.track_id = "track_z".into();
+        hostile.trust = BleAnchorTrust::Unverified;
+
+        let mut adapter = BleIdentityEvidenceAdapter::new(
+            config(),
+            vec![identity_sample(100, 1), hostile, identity_sample(200, 2)],
+        )
+        .unwrap();
+
+        assert!(
+            adapter.next_event().unwrap().is_some(),
+            "the first enrolled sample must promote"
+        );
+        assert!(
+            adapter.next_event().unwrap().is_some(),
+            "an unverified far-future advertisement must not expire later honest \
+             samples; abstentions={:?}",
+            adapter
+                .abstentions()
+                .iter()
+                .map(|a| a.reason.clone())
+                .collect::<Vec<_>>()
+        );
+
+        // The hostile frame is still refused, and refused for the right reason.
+        let reasons: Vec<_> = adapter
+            .abstentions()
+            .iter()
+            .map(|a| a.reason.clone())
+            .collect();
+        assert_eq!(reasons, vec![BleAbstentionReason::Unverified]);
+    }
+
+    /// A `Revoked` anchor is equally untrusted and must not move the clock either.
+    #[test]
+    fn a_revoked_far_future_sample_cannot_expire_legitimate_bindings() {
+        let mut hostile = identity_sample(u64::MAX / 2, 1);
+        hostile.ephemeral_id = [8; 8];
+        hostile.trust = BleAnchorTrust::Revoked;
+
+        let mut adapter = BleIdentityEvidenceAdapter::new(
+            config(),
+            vec![identity_sample(100, 1), hostile, identity_sample(200, 2)],
+        )
+        .unwrap();
+
+        assert!(adapter.next_event().unwrap().is_some());
+        assert!(
+            adapter.next_event().unwrap().is_some(),
+            "a revoked far-future advertisement must not expire later honest samples"
         );
     }
 }
