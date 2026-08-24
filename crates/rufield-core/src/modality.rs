@@ -42,6 +42,11 @@ pub enum Modality {
     /// This is deliberately distinct from [`Modality::BleChannelSounding`]:
     /// advertisement RSSI has no coherent phase or round-trip timing data.
     BleAdvertisementRssi,
+    /// 17 — Rydberg-atom quantum RF vector sensing.
+    ///
+    /// Carries a calibrated electric-field vector rather than a scalar power
+    /// reading, so it is distinct from every RSSI-style modality above.
+    QuantumRf,
 }
 
 impl Modality {
@@ -65,6 +70,7 @@ impl Modality {
             Modality::EventCamera => 14,
             Modality::SyntheticSim => 15,
             Modality::BleAdvertisementRssi => 16,
+            Modality::QuantumRf => 17,
         }
     }
 
@@ -88,12 +94,13 @@ impl Modality {
             Modality::EventCamera => "event_camera",
             Modality::SyntheticSim => "synthetic_sim",
             Modality::BleAdvertisementRssi => "ble_advertisement_rssi",
+            Modality::QuantumRf => "quantum_rf",
         }
     }
 
     /// All 16 modalities in registry order.
     #[must_use]
-    pub fn all() -> [Modality; 16] {
+    pub fn all() -> [Modality; 17] {
         [
             Modality::WifiCsi,
             Modality::WifiCir,
@@ -111,6 +118,7 @@ impl Modality {
             Modality::EventCamera,
             Modality::SyntheticSim,
             Modality::BleAdvertisementRssi,
+            Modality::QuantumRf,
         ]
     }
 }
@@ -135,6 +143,12 @@ pub enum FieldAxis {
     Velocity,
     /// Angle-of-arrival bins.
     Angle,
+    /// Cartesian vector component (x / y / z).
+    CartesianComponent,
+    /// Real / imaginary component of a complex field value.
+    ComplexComponent,
+    /// One candidate direction in a direction-of-arrival solution set.
+    DirectionCandidate,
     /// Temperature (thermal IR).
     Temperature,
     /// Structural vibration.
@@ -150,14 +164,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn modality_has_16_variants() {
-        assert_eq!(Modality::all().len(), 16);
+    fn modality_has_17_variants() {
+        assert_eq!(Modality::all().len(), 17);
     }
 
     #[test]
-    fn modality_codes_are_1_to_16_unique() {
+    fn modality_codes_are_1_to_17_unique() {
         let codes: Vec<u8> = Modality::all().iter().map(|m| m.code()).collect();
-        assert_eq!(codes, (1..=16).collect::<Vec<u8>>());
+        assert_eq!(codes, (1..=17).collect::<Vec<u8>>());
+    }
+
+    /// Wire codes are a published contract, so the two most recent additions
+    /// are pinned by value rather than only by the contiguity check above.
+    /// Code 16 belongs to BLE advertisement RSSI; the quantum-RF adapter was
+    /// originally written against 16 too, and this is what stops a future
+    /// renumber from silently swapping two modalities in the field.
+    #[test]
+    fn recent_wire_codes_are_pinned() {
+        assert_eq!(Modality::BleAdvertisementRssi.code(), 16);
+        assert_eq!(Modality::QuantumRf.code(), 17);
+        assert_eq!(Modality::QuantumRf.as_str(), "quantum_rf");
+        assert_eq!(
+            serde_json::to_string(&Modality::QuantumRf).unwrap(),
+            "\"quantum_rf\""
+        );
     }
 
     #[test]

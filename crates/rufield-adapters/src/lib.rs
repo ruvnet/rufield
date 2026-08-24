@@ -34,6 +34,10 @@
 pub mod ble;
 pub mod ble_scenario;
 pub mod csi_replay;
+mod quantum_rf_quality;
+pub mod quantum_rf_replay;
+mod quantum_rf_support;
+mod quantum_rf_wire;
 pub mod rng;
 pub mod scenario;
 pub mod signals;
@@ -52,6 +56,11 @@ pub use ble_scenario::{
 pub use csi_replay::{
     Baseline, CsiFrame, CsiReplayAdapter, CsiReplayError, DEFAULT_CALIBRATION_FRAMES,
     MAX_SUBCARRIERS, MOTION_THRESHOLD, PRESENCE_THRESHOLD, REPLAY_SIGNER_SEED,
+};
+pub use quantum_rf_replay::{
+    QuantumRfOutput, ReplaySource, RydbergFrame, RydbergGateFailure, RydbergQualityThresholds,
+    RydbergReplayAdapter, RydbergReplayConfig, RydbergReplayError, MAX_ID_BYTES,
+    MAX_QUANTUM_RF_FRAMES, MAX_QUANTUM_RF_LINE_BYTES, QUANTUM_RF_REPLAY_SIGNER_SEED,
 };
 pub use scenario::{demo_timeline, ticks, Phase, PhaseSpan};
 pub use signals::SignalFeatures;

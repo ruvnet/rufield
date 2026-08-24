@@ -99,6 +99,35 @@ fn canonical_event_bytes(event: &FieldEvent) -> Result<Vec<u8>, ProvenanceError>
     serde_json::to_vec(&ev).map_err(|e| ProvenanceError::Serialize(e.to_string()))
 }
 
+/// Canonicalize an Ed25519 verifying key given as hex.
+///
+/// Rejects malformed, wrong-length, and small-order keys, then re-encodes so
+/// two spellings of the same key compare equal.
+///
+/// # Errors
+///
+/// Returns [`ProvenanceError::BadEncoding`] when the hex is not a valid,
+/// non-weak 32-byte Ed25519 public key.
+pub fn normalize_verifying_key_hex(value: &str) -> Result<String, ProvenanceError> {
+    let key = verifying_key_from_hex(value)?;
+    Ok(hex_encode(key.as_bytes()))
+}
+
+fn verifying_key_from_hex(value: &str) -> Result<VerifyingKey, ProvenanceError> {
+    let pk_bytes = hex_decode(value)?;
+    let pk_arr: [u8; 32] = pk_bytes
+        .try_into()
+        .map_err(|_| ProvenanceError::BadEncoding("pubkey not 32 bytes".into()))?;
+    let key = VerifyingKey::from_bytes(&pk_arr)
+        .map_err(|error| ProvenanceError::BadEncoding(error.to_string()))?;
+    if key.is_weak() {
+        return Err(ProvenanceError::BadEncoding(
+            "weak or small-order public key".into(),
+        ));
+    }
+    Ok(key)
+}
+
 fn hex_encode(bytes: &[u8]) -> String {
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -246,6 +275,9 @@ mod tests {
                 vendor: "esp32_c6".into(),
                 device_id: "d1".into(),
                 placement: "corner".into(),
+                coordinate_frame: None,
+                position_m: None,
+                orientation_xyzw: None,
                 clock_domain: "local".into(),
             },
             tensor,

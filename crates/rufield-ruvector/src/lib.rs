@@ -441,6 +441,7 @@ fn modality_name(modality: Modality) -> &'static str {
         Modality::WifiBfld => "wifi_bfld",
         Modality::UwbHrp => "uwb_hrp",
         Modality::BleAdvertisementRssi => "ble_advertisement_rssi",
+        Modality::QuantumRf => "quantum_rf",
         Modality::BleChannelSounding => "ble_channel_sounding",
         Modality::MmwaveRadar => "mmwave_radar",
         Modality::Ultrasonic => "ultrasonic",
