@@ -403,11 +403,43 @@ bound to the sensor independently of the event. They also enforce revocation
 and monotonic replay watermarks; production adds stale/future time bounds. All
 checks pass before either replay or fusion state is mutated.
 
+## BLE evidence and Channel Sounding
+
+ADR 261 adds separate adapters for coherent Bluetooth Channel Sounding and
+BLE advertisement RSSI identity evidence. The identity path consumes an
+authenticated eight-byte ephemeral firmware token at the host boundary,
+derives a deployment-scoped HMAC-SHA-256 pseudonym, and emits only short-lived
+P5 evidence. Raw BLE MAC addresses are never identity. RSSI is never treated
+as coherent phase or exact range. The included two-person crossing scenario is
+deterministic and exercises spoof and expiry abstention. It is simulation, not
+radio or clinical validation.
+
+Live RuView input is admitted only after verification of the independent
+gateway envelope, enrolled node and key, boot session, receive time, and replay
+sequence. Channel Sounding additionally requires the exact enrolled companion,
+an authenticated source session, and a complete coherent procedure with four
+through seventy-nine unique RF channels drawn from channel indices 0 through 78.
+Its sensor id and firmware provenance identify the external companion. The
+ESP32 node, key, boot,
+sequence, receive time, and timing uncertainty remain typed forwarding
+provenance and never imply ESP32 Channel Sounding capability. The gateway HMAC
+authenticates integrity but does not encrypt UDP; deployments add a confidential
+transport when P5 pseudonyms or P0 phase primitives must not be observable on
+the LAN.
+
+Production fusion rejects synthetic BLE and requires an exact sensor-device
+and Ed25519 signer allowlist pair. Fusion windows are partitioned by anonymous
+track, so known tracks never share weighted or temporal evidence. Deterministic
+credentials and provenance metadata are available only through the explicit
+`BleAdapterConfig::synthetic_fixture()` constructor and fail validation when
+marked as production.
+
 ## Spec / ADR
 
 The specification of record is [ADR-260](./docs/ADR-260-rufield-mfs.md). It
 defines the Field Event, Field Tensor, modality registry, privacy classes,
 provenance receipts, fusion rules, benchmark suite, and acceptance criteria.
+The BLE evidence extension is [ADR-261](./docs/ADR-261-ble-evidence-and-channel-sounding.md).
 
 ## License
 

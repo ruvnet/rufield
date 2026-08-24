@@ -10,6 +10,10 @@ pub struct InferenceQuery {
     pub labels: Vec<String>,
     /// Optional zone scope.
     pub zone_id: Option<String>,
+    /// Optional anonymous spatial track scope. `None` queries every partition,
+    /// including the legacy anonymous partition.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<String>,
     /// "As of" time, nanoseconds since Unix epoch; `None` = latest.
     pub as_of_ns: Option<u64>,
 }
@@ -21,6 +25,18 @@ impl InferenceQuery {
         InferenceQuery {
             labels: Vec::new(),
             zone_id: None,
+            track_id: None,
+            as_of_ns: None,
+        }
+    }
+
+    /// Query all labels for one anonymous spatial track.
+    #[must_use]
+    pub fn for_track(track_id: impl Into<String>) -> Self {
+        InferenceQuery {
+            labels: Vec::new(),
+            zone_id: None,
+            track_id: Some(track_id.into()),
             as_of_ns: None,
         }
     }
@@ -32,6 +48,10 @@ impl InferenceQuery {
 pub struct FieldInference {
     /// Inference label (e.g. `person_present`, `bed_exit`).
     pub label: String,
+    /// Anonymous spatial track whose evidence produced this inference. `None`
+    /// preserves the legacy untracked room-level behavior.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub track_id: Option<String>,
     /// Confidence `0.0..=1.0`.
     pub confidence: f32,
     /// Event ids supporting this inference.
@@ -72,6 +92,7 @@ mod tests {
     fn inference_round_trips() {
         let inf = FieldInference {
             label: "person_present".into(),
+            track_id: None,
             confidence: 0.91,
             supporting_events: vec!["e1".into(), "e2".into()],
             contradicting_events: vec![],

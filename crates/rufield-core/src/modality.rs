@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The 15 sensing modalities defined in the RuField MFS modality registry
+/// The sensing modalities defined in the RuField MFS modality registry
 /// (ADR-260 §8). Each maps to a stable numeric code on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -37,6 +37,11 @@ pub enum Modality {
     EventCamera,
     /// 15 — Simulator or replay source.
     SyntheticSim,
+    /// 16 — BLE advertisement RSSI and pseudonymous anchor evidence.
+    ///
+    /// This is deliberately distinct from [`Modality::BleChannelSounding`]:
+    /// advertisement RSSI has no coherent phase or round-trip timing data.
+    BleAdvertisementRssi,
 }
 
 impl Modality {
@@ -59,12 +64,36 @@ impl Modality {
             Modality::QuantumInertial => 13,
             Modality::EventCamera => 14,
             Modality::SyntheticSim => 15,
+            Modality::BleAdvertisementRssi => 16,
         }
     }
 
-    /// All 15 modalities in registry order.
+    /// Stable wire name used by [`crate::SensorDescriptor::modality`].
     #[must_use]
-    pub fn all() -> [Modality; 15] {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Modality::WifiCsi => "wifi_csi",
+            Modality::WifiCir => "wifi_cir",
+            Modality::WifiBfld => "wifi_bfld",
+            Modality::UwbHrp => "uwb_hrp",
+            Modality::BleChannelSounding => "ble_channel_sounding",
+            Modality::MmwaveRadar => "mmwave_radar",
+            Modality::Ultrasonic => "ultrasonic",
+            Modality::Subsonic => "subsonic",
+            Modality::InfraredThermal => "infrared_thermal",
+            Modality::ActiveInfrared => "active_infrared",
+            Modality::LidarPhase => "lidar_phase",
+            Modality::QuantumMagnetic => "quantum_magnetic",
+            Modality::QuantumInertial => "quantum_inertial",
+            Modality::EventCamera => "event_camera",
+            Modality::SyntheticSim => "synthetic_sim",
+            Modality::BleAdvertisementRssi => "ble_advertisement_rssi",
+        }
+    }
+
+    /// All 16 modalities in registry order.
+    #[must_use]
+    pub fn all() -> [Modality; 16] {
         [
             Modality::WifiCsi,
             Modality::WifiCir,
@@ -81,6 +110,7 @@ impl Modality {
             Modality::QuantumInertial,
             Modality::EventCamera,
             Modality::SyntheticSim,
+            Modality::BleAdvertisementRssi,
         ]
     }
 }
@@ -120,14 +150,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn modality_has_15_variants() {
-        assert_eq!(Modality::all().len(), 15);
+    fn modality_has_16_variants() {
+        assert_eq!(Modality::all().len(), 16);
     }
 
     #[test]
-    fn modality_codes_are_1_to_15_unique() {
+    fn modality_codes_are_1_to_16_unique() {
         let codes: Vec<u8> = Modality::all().iter().map(|m| m.code()).collect();
-        assert_eq!(codes, (1..=15).collect::<Vec<u8>>());
+        assert_eq!(codes, (1..=16).collect::<Vec<u8>>());
     }
 
     #[test]
@@ -136,5 +166,9 @@ mod tests {
         assert_eq!(j, "\"wifi_csi\"");
         let m: Modality = serde_json::from_str("\"mmwave_radar\"").unwrap();
         assert_eq!(m, Modality::MmwaveRadar);
+        assert_eq!(
+            Modality::BleAdvertisementRssi.as_str(),
+            "ble_advertisement_rssi"
+        );
     }
 }
