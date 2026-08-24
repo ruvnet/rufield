@@ -9,7 +9,8 @@
 //
 // The banner is honest by construction: it is set from /api/source (SYNTHETIC /
 // LIVE / DISCONNECTED) and the SSE `meta` event, so it always matches the data
-// actually being displayed. Live mode renders ONLY receipt-verified events.
+// actually being displayed. Live mode fuses ONLY events accepted by the
+// independently configured sensor trust policy.
 
 "use strict";
 
@@ -39,7 +40,7 @@ function setStatus(state, text) {
 // Drives the persistent banner from the server's single source of truth. The
 // three states are visually distinct and never interchangeable:
 //   synthetic    → amber "SYNTHETIC — simulated sensors, no hardware"
-//   live         → green  "LIVE — <upstream>"  (real, receipt-verified)
+//   live         → green  "LIVE — <upstream>"  (real, policy-authorized)
 //   disconnected → red    "DISCONNECTED — <upstream> unreachable"
 let SOURCE = "synthetic";
 function applyBanner(banner) {
@@ -52,7 +53,7 @@ function applyBanner(banner) {
     b.textContent =
       "⚠ SYNTHETIC — simulated sensors, no hardware. Every signal below is a deterministic simulator replay, not a live sensor.";
   } else if (state === "live") {
-    b.textContent = `● ${label} — REAL upstream FieldEvents, receipt-verified on ingest. No camera, no identity.`;
+    b.textContent = `● ${label} — REAL upstream FieldEvents, enrolled sensor trust enforced on ingest. No camera, no identity.`;
   } else {
     b.textContent = `✕ ${label}. Live source selected but no events received — NOT falling back to synthetic.`;
   }
@@ -107,28 +108,40 @@ const prettyLabel = (l) =>
 function appendEvents(events) {
   const log = $("event-log");
   for (const ev of events) {
-    EVENTS.set(ev.event_id, ev);
-    const truth = ev.truth_labels.length
-      ? `<div class="truth"><b>truth:</b> ${ev.truth_labels.map(esc).join(", ")}</div>`
-      : `<div class="truth">truth: (empty room)</div>`;
+    const isLive = !!ev.trust;
+    if (!isLive) EVENTS.set(ev.event_id, ev);
+    const accepted = isLive ? ev.trust.accepted : !!(ev.receipt && ev.receipt.verified);
+    const details = isLive ? ev.details : ev;
+    const modality = details ? details.modality : "redacted";
+    const modalityLabel = details ? details.modality_label : "Details redacted";
+    const displayId = isLive ? `live event ${ev.sequence + 1}` : ev.event_id;
+    const diagnostic = isLive
+      ? (accepted
+          ? `trust accepted · privacy ${ev.privacy_disposition}`
+          : `trust rejected · ${prettyLabel(ev.trust.rejection_code || "policy_rejected")} · privacy ${ev.privacy_disposition}`)
+      : (ev.truth_labels.length
+          ? `<b>truth:</b> ${ev.truth_labels.map(esc).join(", ")}`
+          : "truth: (empty room)");
     const node = el("div", "ev");
-    node.dataset.eid = ev.event_id;
-    // Per-event verified ✓/✗ badge. Unverified (forged/tampered) events are
+    if (!isLive) node.dataset.eid = ev.event_id;
+    // Per-event accepted ✓/✗ badge. Rejected events are
     // shown but visibly flagged — they are NOT fused into trusted inferences.
-    const verified = ev.receipt && ev.receipt.verified;
-    const vbadge = verified
-      ? `<span class="verify-ok" title="provenance receipt verified">✓</span>`
-      : `<span class="verify-bad" title="receipt NOT verified — flagged, not fused">✗ unverified</span>`;
-    if (!verified) node.classList.add("ev-unverified");
+    const vbadge = accepted
+      ? `<span class="verify-ok" title="sensor trust policy accepted">✓</span>`
+      : `<span class="verify-bad" title="trust policy rejected — flagged, not fused">✗ rejected</span>`;
+    if (!accepted) node.classList.add("ev-unverified");
+    const confidence = details
+      ? `<span class="conf">conf ${(details.confidence * 100).toFixed(0)}%</span>`
+      : `<span class="conf">redacted</span>`;
     node.innerHTML =
       `<div class="row1">` +
       vbadge +
-      modTag(ev.modality, ev.modality_label) +
+      modTag(modality, modalityLabel) +
       pcBadge(ev.privacy) +
-      `<span class="eid">${esc(ev.event_id)}</span>` +
-      `<span class="conf">conf ${(ev.confidence * 100).toFixed(0)}%</span>` +
-      `</div>` + truth;
-    node.addEventListener("click", () => openReceipt(ev.event_id));
+      `<span class="eid">${esc(displayId)}</span>` +
+      confidence +
+      `</div><div class="truth">${isLive ? esc(diagnostic) : diagnostic}</div>`;
+    if (!isLive) node.addEventListener("click", () => openReceipt(ev.event_id));
     log.prepend(node);
   }
   // Cap DOM size so a long-running loop does not grow unbounded.
@@ -145,16 +158,19 @@ function renderGraph(inferences) {
   }
   for (const inf of inferences) {
     const node = el("div", "inf");
-    const sup = inf.supporting_events.length
-      ? `supports → ${inf.supporting_events.map((e) => `<code>${esc(short(e))}</code>`).join(" ")}`
-      : "supports → (none)";
-    const con = inf.contradicting_events.length
+    const supporting = inf.supporting_events || [];
+    const contradicting = inf.contradicting_events || [];
+    const sup = supporting.length
+      ? `supports → ${supporting.map((e) => `<code>${esc(short(e))}</code>`).join(" ")}`
+      : (SOURCE === "live" ? "provenance edges retained server-side" : "supports → (none)");
+    const con = contradicting.length
       ? `<span class="contra">contradicts → ${inf.contradicting_events.map((e) => `<code>${esc(short(e))}</code>`).join(" ")}</span>`
       : "";
+    const model = inf.model_id ? `${esc(inf.model_id)} · ` : "";
     node.innerHTML =
       `<div class="head"><span class="name">${esc(prettyLabel(inf.label))}</span>` +
       pcBadge(inf.privacy) +
-      `<span class="model">${esc(inf.model_id)} · ${(inf.confidence * 100).toFixed(0)}%</span></div>` +
+      `<span class="model">${model}${(inf.confidence * 100).toFixed(0)}%</span></div>` +
       `<div class="edges">${sup}${con ? "<br>" + con : ""}</div>`;
     g.appendChild(node);
   }
@@ -192,13 +208,15 @@ function renderLiveMeta(meta) {
 }
 
 // Update the integrity panel from a live frame's verification counters.
-function renderLiveIntegrity(verified, unverified) {
+function renderLiveIntegrity(verified, unverified, redactedEvents, redactedInferences) {
   const grid = $("meta-grid");
   const unvClass = unverified === 0 ? "good" : "bad";
   const stats = [
     ["source", "LIVE", "good"],
     ["verified events", verified, "good"],
     ["unverified (flagged, not fused)", unverified, unvClass],
+    ["privacy-redacted event details", redactedEvents || 0, ""],
+    ["privacy-redacted inferences", redactedInferences || 0, ""],
   ];
   grid.innerHTML = "";
   for (const [k, v, cls] of stats) {
@@ -217,14 +235,14 @@ function openReceipt(eventId) {
   $("modal-sub").innerHTML =
     `${modTag(ev.modality, ev.modality_label)} ${pcBadge(ev.privacy)} <span class="eid">${esc(ev.event_id)}</span>`;
   const verified = r.verified
-    ? `<span class="verify-ok">✓ verified</span>`
-    : `<span class="verify-bad">✗ NOT verified</span>`;
+    ? `<span class="verify-ok">✓ policy accepted</span>`
+    : `<span class="verify-bad">✗ policy rejected</span>`;
   const fusable = r.fusable
-    ? `<span class="verify-ok">✓ fusable (§11)</span>`
-    : `<span class="verify-bad">✗ not fusable</span>`;
+    ? `<span class="verify-ok">✓ accepted for fusion</span>`
+    : `<span class="verify-bad">✗ rejected from fusion</span>`;
   const rows = [
-    ["signature", verified],
-    ["fusability", fusable],
+    ["trust decision", verified],
+    ["fusion decision", fusable],
     ["synthetic", r.synthetic ? "true (simulator-flagged)" : "false"],
     ["raw hash", esc(r.raw_hash)],
     ["firmware hash", esc(r.firmware_hash)],
@@ -265,7 +283,12 @@ function connect() {
     renderRoomState(f.inferences);
     renderGraph(f.inferences);
     if (payload.frame) {
-      renderLiveIntegrity(payload.verified_count, payload.unverified_count);
+      renderLiveIntegrity(
+        payload.verified_count,
+        payload.unverified_count,
+        payload.privacy_redacted_count,
+        payload.privacy_redacted_inference_count,
+      );
       setStatus("live", "live · receiving upstream events");
     }
   });

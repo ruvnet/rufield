@@ -1,5 +1,6 @@
-//! The Axum web server (ADR-260 §14 Layer 7). Read-only: it drives the
-//! deterministic synthetic pipeline and serves it to a single-page dashboard.
+//! The Axum web server (ADR-260 §14 Layer 7). Read-only: it serves either the
+//! explicitly labeled deterministic synthetic pipeline or a fail-closed live
+//! pipeline backed by an injected sensor trust registry.
 //!
 //! Routes:
 //! - `GET /`          → the dashboard HTML page.
@@ -8,8 +9,9 @@
 //! - `GET /api/run`   → the full deterministic run as JSON (non-streaming).
 //! - `GET /events`    → Server-Sent Events: each tick frame, paced for viewing.
 //!
-//! There is **no hardware** and **no live sensor**: everything streamed here is
-//! the `SyntheticSim` demo replayed at a watchable cadence.
+//! Synthetic remains the default. Live startup fails unless
+//! [`ViewerConfig::live_trust`] contains a production or captured-replay policy
+//! and independently enrolled sensor keys. Live never falls back to synthetic.
 
 use axum::{
     extract::{Query, State},
@@ -27,7 +29,7 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio_stream::StreamExt;
 
-use crate::live::LiveFrame;
+use crate::live::{LiveFrame, LiveTrustConfig};
 use crate::runtime::{build_run, RunData};
 use crate::source::{
     banner_for, spawn_ingest, BannerState, LiveState, SourceMode, DEFAULT_POLL_MS,
@@ -56,6 +58,9 @@ pub struct ViewerConfig {
     pub source: SourceMode,
     /// Upstream poll interval (ms) for the `/api/field` fallback — live only.
     pub poll_ms: u64,
+    /// Required trust policy and sensor registry for live ingestion. Synthetic
+    /// mode does not use this field.
+    pub live_trust: Option<LiveTrustConfig>,
 }
 
 impl Default for ViewerConfig {
@@ -67,6 +72,37 @@ impl Default for ViewerConfig {
             // Default stays SYNTHETIC — never live by default.
             source: SourceMode::Synthetic,
             poll_ms: DEFAULT_POLL_MS,
+            live_trust: None,
+        }
+    }
+}
+
+/// Fail-closed viewer startup error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ViewerConfigError {
+    /// Live source selected without independent trust configuration.
+    MissingLiveTrust,
+    /// Live trust configuration was invalid or attempted simulation mode.
+    InvalidLiveTrust(rufield_provenance::TrustError),
+}
+
+impl std::fmt::Display for ViewerConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingLiveTrust => write!(
+                f,
+                "live source requires an explicit trust policy and sensor key registry"
+            ),
+            Self::InvalidLiveTrust(error) => write!(f, "invalid live trust configuration: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for ViewerConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::InvalidLiveTrust(error) => Some(error),
+            Self::MissingLiveTrust => None,
         }
     }
 }
@@ -96,12 +132,19 @@ impl AppState {
 /// In [`SourceMode::Live`] this also spawns the background ingest task (it must
 /// therefore be called from within a Tokio runtime, which the binary and the
 /// `#[tokio::test]` harness both provide).
-pub fn app(config: ViewerConfig) -> Router {
+pub fn app(config: ViewerConfig) -> Result<Router, ViewerConfigError> {
     let (live, live_tx) = match &config.source {
         SourceMode::Synthetic => (None, None),
         SourceMode::Live { upstream } => {
+            let trust = config
+                .live_trust
+                .clone()
+                .ok_or(ViewerConfigError::MissingLiveTrust)?;
+            let processor = trust
+                .into_processor()
+                .map_err(ViewerConfigError::InvalidLiveTrust)?;
             let state = Arc::new(LiveState::new(upstream.clone()));
-            let tx = spawn_ingest(state.clone(), config.poll_ms);
+            let tx = spawn_ingest(state.clone(), config.poll_ms, processor);
             (Some(state), Some(tx))
         }
     };
@@ -110,19 +153,21 @@ pub fn app(config: ViewerConfig) -> Router {
         live,
         live_tx,
     });
-    Router::new()
+    Ok(Router::new()
         .route("/", get(index))
         .route("/app.js", get(app_js))
         .route("/health", get(health))
         .route("/api/source", get(api_source))
         .route("/api/run", get(api_run))
         .route("/events", get(events))
-        .with_state(state)
+        .with_state(state))
 }
 
-/// Build the router **without** spawning any background task. Used by the
-/// live-mode tests so they can assert config/banner state synchronously without
-/// requiring a reachable upstream.
+/// Test-only router builder that spawns no background ingest task.
+///
+/// This intentionally bypasses live trust validation because no event can be
+/// ingested. It exists only for synchronous banner and route tests and must not
+/// be used to serve a deployment.
 pub fn app_no_ingest(config: ViewerConfig) -> Router {
     let live = match &config.source {
         SourceMode::Synthetic => None,
@@ -156,6 +201,7 @@ async fn app_js() -> impl IntoResponse {
 
 async fn health(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     let banner = st.banner();
+    let trust_mode = st.config.live_trust.as_ref().map(|trust| trust.policy.mode);
     Json(serde_json::json!({
         "status": "ok",
         "spec_version": rufield_core::SPEC_VERSION,
@@ -163,6 +209,7 @@ async fn health(State(st): State<Arc<AppState>>) -> impl IntoResponse {
         "synthetic": st.config.source.is_synthetic(),
         "source": st.config.source.code(),
         "upstream": st.config.source.upstream(),
+        "trust_mode": trust_mode,
         "banner": banner,
         "banner_label": banner.label(),
         "seed": st.config.seed,
@@ -175,9 +222,11 @@ async fn health(State(st): State<Arc<AppState>>) -> impl IntoResponse {
 /// DISCONNECTED) banner; it is the single source of truth for banner honesty.
 async fn api_source(State(st): State<Arc<AppState>>) -> impl IntoResponse {
     let banner = st.banner();
+    let trust_mode = st.config.live_trust.as_ref().map(|trust| trust.policy.mode);
     Json(serde_json::json!({
         "source": st.config.source.code(),
         "upstream": st.config.source.upstream(),
+        "trust_mode": trust_mode,
         "synthetic": st.config.source.is_synthetic(),
         "banner": banner,
         "banner_label": banner.label(),
@@ -221,8 +270,9 @@ async fn api_run(
 /// - **Synthetic** mode: replay the deterministic synthetic run, paced at
 ///   `tick_ms`, emitting `meta` → `frame`* → `done` (looping unless `--no-loop`).
 /// - **Live** mode: emit a `meta` frame announcing the LIVE/DISCONNECTED banner,
-///   then forward each ingested upstream [`LiveFrame`] as a `frame` event as it
-///   arrives. There is no `done` (a live feed does not end).
+///   then forward each privacy-guarded public [`LiveFrame`] as a `frame` event.
+///   Raw upstream events never enter this channel. There is no `done` because a
+///   live feed does not end.
 async fn events(
     State(st): State<Arc<AppState>>,
     Query(params): Query<RunParams>,
@@ -375,6 +425,11 @@ impl tokio_stream::Stream for PayloadStream {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::live::{
+        LiveEventDetails, LiveEventView, LivePrivacyDisposition, LiveTickFrame,
+        LiveTrustDecisionView, LiveTrustRejectionCode,
+    };
+    use http_body_util::BodyExt;
 
     #[test]
     fn config_defaults_are_sane() {
@@ -382,5 +437,78 @@ mod tests {
         assert_eq!(c.seed, 2026);
         assert!(c.tick_ms >= 1);
         assert!(c.loop_stream);
+        assert!(c.live_trust.is_none());
+    }
+
+    #[tokio::test]
+    async fn live_http_sse_contains_diagnostics_but_no_sensitive_event_fields() {
+        let upstream = "http://127.0.0.1:8080";
+        let config = ViewerConfig {
+            source: SourceMode::Live {
+                upstream: upstream.into(),
+            },
+            ..ViewerConfig::default()
+        };
+        let live = Arc::new(LiveState::new(upstream));
+        let state = Arc::new(AppState {
+            config,
+            live: Some(live),
+            live_tx: None,
+        });
+        let (tx, _rx) = broadcast::channel(4);
+        let stream = live_event_stream(state, tx.clone()).take(2);
+
+        tx.send(LiveFrame {
+            frame: LiveTickFrame {
+                tick: 7,
+                events: vec![LiveEventView {
+                    sequence: 0,
+                    privacy: rufield_core::PrivacyClass::P2.into(),
+                    trust: LiveTrustDecisionView {
+                        accepted: false,
+                        rejection_code: Some(LiveTrustRejectionCode::UnknownKey),
+                    },
+                    privacy_disposition: LivePrivacyDisposition::Allowed,
+                    details: Some(LiveEventDetails {
+                        modality: "wifi_csi",
+                        modality_label: "WiFi CSI",
+                        confidence: 0.8,
+                    }),
+                }],
+                inferences: Vec::new(),
+            },
+            verified_count: 0,
+            unverified_count: 1,
+            privacy_redacted_count: 0,
+            privacy_redacted_inference_count: 0,
+        })
+        .unwrap();
+
+        let response = Sse::new(stream).into_response();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        let body = String::from_utf8(bytes.to_vec()).unwrap();
+
+        assert!(body.contains("unknown_key"));
+        assert!(body.contains("unverified_count"));
+        for forbidden_key in [
+            "event_id",
+            "device_id",
+            "zone_id",
+            "truth_labels",
+            "receipt",
+            "raw_hash",
+            "firmware_hash",
+            "signer_pubkey_hex",
+            "signature_hex",
+            "supporting_events",
+            "contradicting_events",
+            "model_id",
+            "calibration_id",
+        ] {
+            assert!(
+                !body.contains(&format!("\"{forbidden_key}\"")),
+                "SSE exposed forbidden field {forbidden_key}: {body}"
+            );
+        }
     }
 }

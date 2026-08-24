@@ -3,15 +3,23 @@
 //! Ingests [`FieldEvent`]s, maintains a short temporal window of recent
 //! per-modality derived features, applies the TOML [`RuleSet`], and produces
 //! [`FieldInference`]s with supporting/contradicting events, confidence decay,
-//! and `expires_at`. Events that fail the §11 fusability invariant are rejected.
+//! and `expires_at`. Ingestion runs through a stateful provenance trust policy
+//! before any event reaches the fusion window or graph.
 
 use crate::graph::{EdgeKind, FusionGraph, NodeKind};
 use crate::rules::{Method, Rule, RuleSet};
 use rufield_core::{
     FieldEvent, FieldInference, FusionEngine, InferenceQuery, Modality, PrivacyClass,
 };
-use rufield_provenance::is_fusable;
+// §11 fusability is not called directly here: `TrustVerifier` owns it in both
+// modes. Simulation applies `is_fusable` itself, and production requires a
+// valid signature from an enrolled, unrevoked, fresh key -- strictly more than
+// `is_fusable`'s synthetic-or-valid-signature test. Calling it here as well
+// would pre-empt the verifier and report `NotFusable` for a tampered event that
+// the verifier can describe precisely.
+use rufield_provenance::{TrustError, TrustMode, TrustPolicy, TrustVerifier, TrustedKeyRegistry};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// How long an inference stays valid after production (ns). 2 seconds.
 const INFERENCE_TTL_NS: u64 = 2_000_000_000;
@@ -108,8 +116,15 @@ impl Default for BleTrustPolicy {
 /// Errors from the fusion engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FusionError {
-    /// An event failed the §11 fusability invariant (no receipt, not synthetic).
+    /// An event failed the legacy simulation fusability invariant.
     NotFusable(String),
+    /// Captured replay or production policy rejected an event.
+    TrustRejected {
+        /// Rejected event id.
+        event_id: String,
+        /// Machine-readable trust-policy reason.
+        reason: TrustError,
+    },
     /// A signed or synthetic event still failed cross-field evidence rules.
     InvalidEvidence {
         /// Event identifier.
@@ -130,10 +145,10 @@ impl std::fmt::Display for FusionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             FusionError::NotFusable(id) => {
-                write!(
-                    f,
-                    "event {id} is not fusable (no verified receipt and not synthetic)"
-                )
+                write!(f, "event {id} is not fusable in simulation mode")
+            }
+            FusionError::TrustRejected { event_id, reason } => {
+                write!(f, "event {event_id} rejected by trust policy: {reason}")
             }
             FusionError::InvalidEvidence { event_id, reason } => {
                 write!(f, "event {event_id} carries invalid evidence: {reason}")
@@ -144,7 +159,16 @@ impl std::fmt::Display for FusionError {
         }
     }
 }
-impl std::error::Error for FusionError {}
+impl std::error::Error for FusionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::TrustRejected { reason, .. } => Some(reason),
+            // These two carry a rendered reason string rather than a typed
+            // source error, so there is nothing further to chain to.
+            Self::NotFusable(_) | Self::InvalidEvidence { .. } | Self::UntrustedBle { .. } => None,
+        }
+    }
+}
 
 /// A retained event with its key derived features.
 #[derive(Debug, Clone)]
@@ -164,6 +188,7 @@ struct WindowItem {
 /// The default RuField fusion engine.
 pub struct RuFieldFusion {
     rules: RuleSet,
+    trust: TrustVerifier,
     window: VecDeque<WindowItem>,
     graph: FusionGraph,
     last_ts_ns: u64,
@@ -171,29 +196,69 @@ pub struct RuFieldFusion {
 }
 
 impl RuFieldFusion {
-    /// Construct with the default room-state rule set.
+    /// Construct the backwards-compatible deterministic simulation engine.
+    ///
+    /// Live callers must instead construct a production [`TrustVerifier`] and
+    /// pass it to [`Self::with_trust_verifier`].
     #[must_use]
     pub fn new() -> Self {
         RuFieldFusion::with_rules(RuleSet::default_room_state())
     }
 
-    /// Construct with a custom rule set.
+    /// Construct with custom rules in explicit simulation mode.
     #[must_use]
     pub fn with_rules(rules: RuleSet) -> Self {
-        RuFieldFusion::with_rules_and_ble_trust(rules, BleTrustPolicy::production())
+        Self::with_rules_trust_and_ble(
+            rules,
+            TrustVerifier::simulation(),
+            BleTrustPolicy::production(),
+        )
+    }
+
+    /// Construct with default rules and an explicit trust policy.
+    #[must_use]
+    pub fn with_trust_verifier(trust: TrustVerifier) -> Self {
+        Self::with_rules_and_trust(RuleSet::default_room_state(), trust)
+    }
+
+    /// Construct a fail-closed live engine from independently enrolled keys.
+    #[must_use]
+    pub fn production(registry: TrustedKeyRegistry) -> Self {
+        Self::with_trust_verifier(TrustVerifier::new(TrustPolicy::production(), registry))
+    }
+
+    /// Construct with custom rules and an explicit trust policy.
+    #[must_use]
+    pub fn with_rules_and_trust(rules: RuleSet, trust: TrustVerifier) -> Self {
+        Self::with_rules_trust_and_ble(rules, trust, BleTrustPolicy::production())
     }
 
     /// Construct with default room rules and an explicit BLE trust policy.
     #[must_use]
     pub fn with_ble_trust(ble_trust: BleTrustPolicy) -> Self {
-        RuFieldFusion::with_rules_and_ble_trust(RuleSet::default_room_state(), ble_trust)
+        Self::with_rules_and_ble_trust(RuleSet::default_room_state(), ble_trust)
     }
 
     /// Construct with custom rules and an explicit BLE trust policy.
     #[must_use]
     pub fn with_rules_and_ble_trust(rules: RuleSet, ble_trust: BleTrustPolicy) -> Self {
+        Self::with_rules_trust_and_ble(rules, TrustVerifier::simulation(), ble_trust)
+    }
+
+    /// Construct with custom rules and both trust policies stated explicitly.
+    ///
+    /// The two gates are independent and both must pass: [`TrustVerifier`]
+    /// governs provenance for every event, while [`BleTrustPolicy`] adds the
+    /// device/signer allowlist that only BLE modalities are subject to.
+    #[must_use]
+    pub fn with_rules_trust_and_ble(
+        rules: RuleSet,
+        trust: TrustVerifier,
+        ble_trust: BleTrustPolicy,
+    ) -> Self {
         RuFieldFusion {
             rules,
+            trust,
             window: VecDeque::new(),
             graph: FusionGraph::new(),
             last_ts_ns: 0,
@@ -201,10 +266,112 @@ impl RuFieldFusion {
         }
     }
 
+    /// Read-only access to policy, enrollment and replay state.
+    #[must_use]
+    pub const fn trust_verifier(&self) -> &TrustVerifier {
+        &self.trust
+    }
+
+    /// Mutable access for protected enrollment, revocation and replay-state
+    /// restoration before ingestion starts.
+    #[must_use]
+    pub fn trust_verifier_mut(&mut self) -> &mut TrustVerifier {
+        &mut self.trust
+    }
+
     /// Read-only view of the fusion graph.
     #[must_use]
     pub fn graph(&self) -> &FusionGraph {
         &self.graph
+    }
+
+    /// Ingest using an explicit wall-clock value. This is the deterministic
+    /// entry point for production tests and replay orchestration.
+    pub fn ingest_at(&mut self, event: FieldEvent, now_ns: u64) -> Result<(), FusionError> {
+        let event_id = event.event_id.clone();
+        let mode = self.trust.mode();
+        if let Err(reason) = self.trust.verify_and_record_at(&event, now_ns) {
+            return if mode == TrustMode::Simulation {
+                Err(FusionError::NotFusable(event_id))
+            } else {
+                Err(FusionError::TrustRejected { event_id, reason })
+            };
+        }
+        // The provenance verifier proves origin and integrity. Two further
+        // gates are independent of it and must also pass before anything
+        // reaches the graph: BLE carries a device/signer allowlist, and every
+        // event carries short-lived identity/privacy/modality invariants that
+        // are only meaningful at the current stream watermark.
+        if let Err(reason) = self.ble_trust.validate(&event) {
+            return Err(FusionError::UntrustedBle { event_id, reason });
+        }
+        let evidence_watermark = self.last_ts_ns.max(event.timestamp_ns);
+        if let Err(error) = event.validate_evidence_at(evidence_watermark) {
+            return Err(FusionError::InvalidEvidence {
+                event_id,
+                reason: error.to_string(),
+            });
+        }
+        self.commit_verified_event(event);
+        Ok(())
+    }
+
+    fn commit_verified_event(&mut self, event: FieldEvent) {
+        let f = &event.observation.features;
+        let item = WindowItem {
+            event_id: event.event_id.clone(),
+            modality: event.sensor.modality.clone(),
+            track_id: event.observation.track_id.clone(),
+            timestamp_ns: event.timestamp_ns,
+            motion_energy: *f.get("motion_energy").unwrap_or(&0.0),
+            breathing_band: *f.get("breathing_band").unwrap_or(&0.0),
+            posture_height: *f.get("posture_height").unwrap_or(&0.0),
+            transient: *f.get("transient").unwrap_or(&0.0),
+            range_m: *f.get("range_m").unwrap_or(&0.0),
+            presence: *f.get("presence").unwrap_or(&0.0),
+        };
+
+        self.graph
+            .add_node(&event.sensor.device_id, NodeKind::Sensor);
+        self.graph.add_node(&event.event_id, NodeKind::Event);
+        self.graph.add_edge(
+            &event.event_id,
+            &event.sensor.device_id,
+            EdgeKind::ObservedBy,
+        );
+
+        self.last_ts_ns = self.last_ts_ns.max(event.timestamp_ns);
+        self.window.push_back(item);
+        // Bound each track and modality partition independently so one noisy
+        // track cannot evict another track's recent evidence.
+        let newest = self.window.back().expect("item was just inserted");
+        let partition_track = newest.track_id.clone();
+        let partition_modality = newest.modality.clone();
+        while self
+            .window
+            .iter()
+            .filter(|candidate| {
+                candidate.track_id == partition_track && candidate.modality == partition_modality
+            })
+            .count()
+            > WINDOW
+        {
+            if let Some((index, _)) = self
+                .window
+                .iter()
+                .enumerate()
+                .filter(|(_, candidate)| {
+                    candidate.track_id == partition_track
+                        && candidate.modality == partition_modality
+                })
+                .min_by_key(|(_, candidate)| candidate.timestamp_ns)
+            {
+                self.window.remove(index);
+            }
+        }
+        while self.window.len() > WINDOW * MAX_MODALITIES * MAX_TRACK_PARTITIONS {
+            self.window.pop_front();
+        }
     }
 
     fn feat(&self, item: &WindowItem, key: &str) -> f32 {
@@ -364,84 +531,11 @@ impl FusionEngine for RuFieldFusion {
     type Error = FusionError;
 
     fn ingest(&mut self, event: FieldEvent) -> Result<(), Self::Error> {
-        // §11 invariant: reject non-fusable events.
-        if !is_fusable(&event) {
-            return Err(FusionError::NotFusable(event.event_id.clone()));
-        }
-        if let Err(reason) = self.ble_trust.validate(&event) {
-            return Err(FusionError::UntrustedBle {
-                event_id: event.event_id.clone(),
-                reason,
-            });
-        }
-        // A valid receipt proves origin and integrity, not semantic validity.
-        // Apply short-lived identity/privacy/modality invariants at the current
-        // stream watermark before any node or feature reaches the graph.
-        let evidence_watermark = self.last_ts_ns.max(event.timestamp_ns);
-        if let Err(error) = event.validate_evidence_at(evidence_watermark) {
-            return Err(FusionError::InvalidEvidence {
-                event_id: event.event_id.clone(),
-                reason: error.to_string(),
-            });
-        }
-
-        let f = &event.observation.features;
-        let item = WindowItem {
-            event_id: event.event_id.clone(),
-            modality: event.sensor.modality.clone(),
-            track_id: event.observation.track_id.clone(),
-            timestamp_ns: event.timestamp_ns,
-            motion_energy: *f.get("motion_energy").unwrap_or(&0.0),
-            breathing_band: *f.get("breathing_band").unwrap_or(&0.0),
-            posture_height: *f.get("posture_height").unwrap_or(&0.0),
-            transient: *f.get("transient").unwrap_or(&0.0),
-            range_m: *f.get("range_m").unwrap_or(&0.0),
-            presence: *f.get("presence").unwrap_or(&0.0),
-        };
-
-        // Record provenance in the graph.
-        self.graph
-            .add_node(&event.sensor.device_id, NodeKind::Sensor);
-        self.graph.add_node(&event.event_id, NodeKind::Event);
-        self.graph.add_edge(
-            &event.event_id,
-            &event.sensor.device_id,
-            EdgeKind::ObservedBy,
-        );
-
-        self.last_ts_ns = self.last_ts_ns.max(event.timestamp_ns);
-        self.window.push_back(item);
-        // Bound each track and modality partition independently so one noisy
-        // track cannot evict another track's recent evidence.
-        let newest = self.window.back().expect("item was just inserted");
-        let partition_track = newest.track_id.clone();
-        let partition_modality = newest.modality.clone();
-        while self
-            .window
-            .iter()
-            .filter(|candidate| {
-                candidate.track_id == partition_track && candidate.modality == partition_modality
-            })
-            .count()
-            > WINDOW
-        {
-            if let Some((index, _)) = self
-                .window
-                .iter()
-                .enumerate()
-                .filter(|(_, candidate)| {
-                    candidate.track_id == partition_track
-                        && candidate.modality == partition_modality
-                })
-                .min_by_key(|(_, candidate)| candidate.timestamp_ns)
-            {
-                self.window.remove(index);
-            }
-        }
-        while self.window.len() > WINDOW * MAX_MODALITIES * MAX_TRACK_PARTITIONS {
-            self.window.pop_front();
-        }
-        Ok(())
+        let now_ns = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| u64::try_from(duration.as_nanos()).unwrap_or(u64::MAX))
+            .unwrap_or(0);
+        self.ingest_at(event, now_ns)
     }
 
     fn infer(&self, query: &InferenceQuery) -> Result<Vec<FieldInference>, Self::Error> {
@@ -482,6 +576,7 @@ impl FusionEngine for RuFieldFusion {
 mod tests {
     use super::*;
     use rufield_adapters::{run_demo, SimConfig};
+    use rufield_provenance::Signer;
 
     #[test]
     fn rejects_non_fusable_event() {
@@ -498,6 +593,100 @@ mod tests {
         let mut engine = RuFieldFusion::with_ble_trust(BleTrustPolicy::synthetic_test_only());
         let err = engine.ingest(ev).unwrap_err();
         assert!(matches!(err, FusionError::NotFusable(_)));
+    }
+
+    #[test]
+    fn production_rejection_cannot_mutate_graph_or_replay_watermark() {
+        let cfg = SimConfig {
+            seed: 2,
+            ..SimConfig::default()
+        };
+        let mut event = run_demo(&cfg).remove(0).event;
+        event.provenance.synthetic = false;
+        let signer = Signer::from_seed(&[21; 32]);
+        signer.sign_event(&mut event).unwrap();
+
+        let mut engine = RuFieldFusion::production(TrustedKeyRegistry::new());
+        let timestamp_ns = event.timestamp_ns;
+        let error = engine.ingest_at(event, timestamp_ns).unwrap_err();
+        assert!(matches!(
+            error,
+            FusionError::TrustRejected {
+                reason: TrustError::UnknownKey,
+                ..
+            }
+        ));
+        assert_eq!(engine.graph().node_count(), 0);
+        assert!(engine
+            .trust_verifier()
+            .export_replay_state()
+            .watermarks
+            .is_empty());
+    }
+
+    #[test]
+    fn production_acceptance_mutates_graph_only_after_trust() {
+        let cfg = SimConfig {
+            seed: 3,
+            ..SimConfig::default()
+        };
+        let mut event = run_demo(&cfg).remove(0).event;
+        event.provenance.synthetic = false;
+        let signer = Signer::from_seed(&[22; 32]);
+        signer.sign_event(&mut event).unwrap();
+
+        let mut registry = TrustedKeyRegistry::new();
+        registry
+            .enroll_sensor_key(&event.sensor.device_id, signer.public_hex())
+            .unwrap();
+        let timestamp_ns = event.timestamp_ns;
+        let mut engine = RuFieldFusion::production(registry);
+        engine.ingest_at(event, timestamp_ns).unwrap();
+
+        assert_eq!(engine.graph().node_count(), 2);
+        assert_eq!(
+            engine
+                .trust_verifier()
+                .export_replay_state()
+                .watermarks
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn empty_event_id_cannot_mutate_graph_or_replay_watermark() {
+        let cfg = SimConfig {
+            seed: 4,
+            ..SimConfig::default()
+        };
+        let mut event = run_demo(&cfg).remove(0).event;
+        event.event_id.clear();
+        event.provenance.synthetic = false;
+        let signer = Signer::from_seed(&[23; 32]);
+        signer.sign_event(&mut event).unwrap();
+
+        let mut registry = TrustedKeyRegistry::new();
+        registry
+            .enroll_sensor_key(&event.sensor.device_id, signer.public_hex())
+            .unwrap();
+        let timestamp_ns = event.timestamp_ns;
+        let mut engine = RuFieldFusion::production(registry);
+        let error = engine.ingest_at(event, timestamp_ns).unwrap_err();
+
+        assert!(matches!(
+            error,
+            FusionError::TrustRejected {
+                reason: TrustError::MalformedIdentity(_),
+                ..
+            }
+        ));
+        assert_eq!(engine.graph().node_count(), 0);
+        assert!(engine
+            .trust_verifier()
+            .export_replay_state()
+            .watermarks
+            .is_empty());
     }
 
     #[test]
@@ -601,5 +790,34 @@ mod tests {
         assert!(inferences
             .iter()
             .all(|inference| inference.produced_ns == expected_timestamp));
+    }
+    /// The two ingest gates are independent, and merging the provenance
+    /// verifier in front of the BLE allowlist must not make the allowlist
+    /// unreachable. A synthetic BLE event is fusable in simulation, so it
+    /// passes the verifier -- and must still be refused by the default
+    /// production `BleTrustPolicy`.
+    #[test]
+    fn the_ble_allowlist_still_fires_behind_the_provenance_verifier() {
+        let scenario = rufield_adapters::two_person_ble_crossing_scenario();
+        let ble = scenario
+            .events
+            .into_iter()
+            .find(|event| {
+                event.sensor.modality == Modality::BleAdvertisementRssi.as_str()
+                    || event.sensor.modality == Modality::BleChannelSounding.as_str()
+            })
+            .expect("scenario contains a BLE event");
+
+        let mut engine = RuFieldFusion::new();
+        let error = engine.ingest(ble).unwrap_err();
+        assert!(
+            matches!(error, FusionError::UntrustedBle { .. }),
+            "the BLE allowlist must still refuse untrusted BLE after the merge, got {error:?}"
+        );
+        assert_eq!(
+            engine.graph().node_count(),
+            0,
+            "a refused event must not reach the graph"
+        );
     }
 }
