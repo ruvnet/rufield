@@ -910,6 +910,7 @@ dependencies = [
 name = "rufield-bench"
 version = "0.1.0"
 dependencies = [
+ "ed25519-dalek",
  "rufield-adapters",
  "rufield-core",
  "rufield-fusion",
@@ -917,6 +918,7 @@ dependencies = [
  "rufield-provenance",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -939,6 +941,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rufield-interop"
+version = "0.1.0"
+dependencies = [
+ "rufield-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rufield-privacy"
 version = "0.1.0"
 dependencies = [
@@ -954,6 +965,23 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "rufield-ruvector"
+version = "0.1.0"
+dependencies = [
+ "rufield-core",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "rufield-uncertainty"
+version = "0.1.0"
+dependencies = [
+ "rufield-core",
 ]
 
 [[package]]

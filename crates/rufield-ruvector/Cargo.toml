@@ -1,0 +1,19 @@
+[package]
+name = "rufield-ruvector"
+version.workspace = true
+edition.workspace = true
+description = "Optional backend boundary between RuField FieldEncoder and RuVector embeddings"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "embedding", "ruvector"]
+categories = ["science"]
+
+[dependencies]
+rufield-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+
+[lints]
+workspace = true

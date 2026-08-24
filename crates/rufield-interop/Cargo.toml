@@ -1,0 +1,18 @@
+[package]
+name = "rufield-interop"
+version.workspace = true
+edition.workspace = true
+description = "Deterministic CloudEvents and SOSA projections for RuField events"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "cloudevents", "sosa"]
+categories = ["science"]
+
+[dependencies]
+rufield-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "rufield-uncertainty"
+version.workspace = true
+edition.workspace = true
+description = "Model independent uncertainty and split conformal calibration for RuField"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["sensing", "uncertainty", "conformal"]
+categories = ["science"]
+
+[dependencies]
+rufield-core = { workspace = true }
+
+[lints]
+workspace = true

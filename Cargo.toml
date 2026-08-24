@@ -7,6 +7,9 @@ members = [
     "crates/rufield-adapters",
     "crates/rufield-fusion",
     "crates/rufield-bench",
+    "crates/rufield-interop",
+    "crates/rufield-ruvector",
+    "crates/rufield-uncertainty",
     "crates/rufield-viewer",
 ]
 
@@ -34,6 +37,9 @@ rufield-privacy = { version = "0.1.0", path = "crates/rufield-privacy" }
 rufield-adapters = { version = "0.1.0", path = "crates/rufield-adapters" }
 rufield-fusion = { version = "0.1.0", path = "crates/rufield-fusion" }
 rufield-bench = { version = "0.1.0", path = "crates/rufield-bench" }
+rufield-interop = { version = "0.1.0", path = "crates/rufield-interop" }
+rufield-ruvector = { version = "0.1.0", path = "crates/rufield-ruvector" }
+rufield-uncertainty = { version = "0.1.0", path = "crates/rufield-uncertainty" }
 rufield-viewer = { version = "0.1.0", path = "crates/rufield-viewer" }
 
 [workspace.lints.rust]

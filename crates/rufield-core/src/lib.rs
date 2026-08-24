@@ -29,7 +29,10 @@ pub use event::{
     MAX_CHANNEL_SOUNDING_CHANNELS, MAX_CHANNEL_SOUNDING_CHANNEL_INDEX,
     MAX_IDENTITY_EVIDENCE_TTL_NS, MIN_CHANNEL_SOUNDING_CHANNELS, MIN_IDENTITY_EVIDENCE_CONFIDENCE,
 };
-pub use inference::{FieldEmbedding, FieldInference, InferenceQuery};
+pub use inference::{
+    AbstentionReason, CalibratedInference, CalibrationContext, FieldEmbedding, FieldInference,
+    InferenceQuery, PredictionInterval, PredictionSet, UncertaintyEnvelope,
+};
 pub use modality::{FieldAxis, Modality};
 pub use privacy::PrivacyClass;
 pub use tensor::{FieldTensor, SPEC_VERSION};

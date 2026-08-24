@@ -1,0 +1,61 @@
+{
+  "specversion": "1.0",
+  "id": "fixture-event-001",
+  "source": "urn:rufield:device:fixture_device_01",
+  "type": "net.ruv.rufield.observation.v1",
+  "subject": "fixture_device_01",
+  "datacontenttype": "application/vnd.rufield.event+json",
+  "sourceprofile": "ieee.802.11bf.2025",
+  "timeunixnano": 1791986400000000000,
+  "data": {
+    "spec_version": "rufield.mfs.v0.1",
+    "event_id": "fixture-event-001",
+    "timestamp_ns": 1791986400000000000,
+    "sensor": {
+      "modality": "wifi_csi",
+      "vendor": "fixture_vendor",
+      "device_id": "fixture_device_01",
+      "placement": "fixture_ceiling",
+      "clock_domain": "fixture_clock"
+    },
+    "tensor": {
+      "spec_version": "rufield.mfs.v0.1",
+      "timestamp_ns": 1791986400000000000,
+      "modality": "wifi_csi",
+      "axes": [
+        "frequency"
+      ],
+      "shape": [
+        2
+      ],
+      "values": [
+        0.25,
+        0.75
+      ],
+      "confidence": 0.8,
+      "noise_floor": 0.02,
+      "calibration_id": "fixture_cal_01",
+      "privacy_class": "P1"
+    },
+    "observation": {
+      "zone_id": "fixture_room_01",
+      "space_cell": null,
+      "range_m": null,
+      "velocity_mps": null,
+      "motion_vector": null,
+      "confidence": 0.8,
+      "features": {},
+      "labels": [
+        "fixture_person_present"
+      ],
+      "privacy_class": "P2"
+    },
+    "provenance": {
+      "raw_hash": "sha256:fixture_raw_hash",
+      "firmware_hash": "sha256:fixture_firmware_hash",
+      "model_id": "fixture_model",
+      "calibration_id": "fixture_cal_01",
+      "synthetic": false
+    }
+  }
+}

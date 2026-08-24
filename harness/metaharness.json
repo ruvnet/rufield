@@ -1,0 +1,29 @@
+{
+  "schema": "metaharness.local.v1",
+  "name": "rufield-evidence-platform",
+  "objective": "Reject unevidenced field accuracy promotion while preserving deterministic conformance checks",
+  "command": "sh harness/run-evidence-gate.sh",
+  "promotion": {
+    "required_environment": [
+      "RUFIELD_EVIDENCE_MANIFEST",
+      "RUFIELD_EVIDENCE_BUNDLE",
+      "RUFIELD_EVALUATED_MODEL",
+      "RUFIELD_AUTHORITY_REGISTRY",
+      "RUFIELD_SPLIT_ARTIFACT or RUFIELD_MODEL_LINEAGE"
+    ],
+    "strict_environment": "RUFIELD_REQUIRE_PROMOTION=1",
+    "receipt": "rufield-bench evidence-gate JSON with policy and verified artifact lineage"
+  },
+  "invariants": [
+    "Repository fixtures are conformance only",
+    "Cargo absence fails the complete gate even when Node conformance passes",
+    "Simulation never satisfies physical evidence counts",
+    "Room, device, day, session, and participant held out protocols are leakage checked",
+    "Every threshold is evaluated by the Rust promotion gate",
+    "Local artifact bytes must match the manifest SHA256 digests",
+    "Promotion receipts expose the exact policy, authority, model, and verified artifact lineage",
+    "Promotion requires governed versioned JSON and an independently supplied Ed25519 authority registry",
+    "The evaluated model digest is observed from locally materialized model bytes",
+    "Only physical records contribute promotion split fold coverage"
+  ]
+}
