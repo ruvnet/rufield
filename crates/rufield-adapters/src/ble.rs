@@ -1066,6 +1066,9 @@ fn descriptor(config: &BleAdapterConfig, modality: Modality) -> SensorDescriptor
         vendor: config.vendor.clone(),
         device_id: config.device_id.clone(),
         placement: config.placement.clone(),
+        coordinate_frame: None,
+        position_m: None,
+        orientation_xyzw: None,
         clock_domain: config.clock_domain.clone(),
     }
 }
@@ -1076,6 +1079,9 @@ fn channel_sounding_descriptor(config: &BleAdapterConfig, source_id: u32) -> Sen
         vendor: "external_ble_channel_sounding_companion".into(),
         device_id: channel_sounding_sensor_id(source_id),
         placement: config.placement.clone(),
+        coordinate_frame: None,
+        position_m: None,
+        orientation_xyzw: None,
         clock_domain: config.clock_domain.clone(),
     }
 }

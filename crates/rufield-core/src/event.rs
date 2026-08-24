@@ -4,6 +4,7 @@
 use crate::privacy::PrivacyClass;
 use crate::tensor::{FieldTensor, SPEC_VERSION};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// Maximum permitted lifetime of short-lived identity evidence: five seconds.
 pub const MAX_IDENTITY_EVIDENCE_TTL_NS: u64 = 5_000_000_000;
@@ -310,7 +311,10 @@ pub fn channel_sounding_sensor_id(source_id: u32) -> String {
 }
 
 /// Describes the sensor that produced an event (ADR-260 §7 `sensor`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `Eq` is deliberately not derived: the optional pose carries `f32`
+/// coordinates, and float equality is not an equivalence relation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SensorDescriptor {
     /// Modality string code (e.g. `wifi_csi`).
     pub modality: String,
@@ -320,6 +324,16 @@ pub struct SensorDescriptor {
     pub device_id: String,
     /// Physical placement hint (e.g. `ceiling_corner`).
     pub placement: String,
+    /// Shared Cartesian coordinate frame for the optional sensor pose.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coordinate_frame: Option<String>,
+    /// Sensor origin `[x, y, z]` in metres in `coordinate_frame`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub position_m: Option<[f32; 3]>,
+    /// Quaternion `[x, y, z, w]` rotating sensor-local vectors into
+    /// `coordinate_frame`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub orientation_xyzw: Option<[f32; 4]>,
     /// Clock domain for `timestamp_ns` (e.g. `local_ptp`).
     pub clock_domain: String,
 }
@@ -349,6 +363,12 @@ pub struct Observation {
     /// `FieldEncoder` would compute from the tensor.
     #[serde(default)]
     pub features: std::collections::BTreeMap<String, f32>,
+    /// String context for exact identifiers and categorical metadata that must
+    /// not be encoded as lossy numeric features. Covered by the event signature
+    /// when the enclosing event is signed. Absent from the wire when empty, so
+    /// events predating it round-trip unchanged.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub attributes: BTreeMap<String, String>,
     /// Ground-truth or derived labels attached to this observation. In the
     /// synthetic simulator these are the **ground-truth** labels used only by
     /// the benchmark to score against; the fusion engine never reads them.
@@ -378,6 +398,7 @@ impl Observation {
             track_id: None,
             confidence,
             features: std::collections::BTreeMap::new(),
+            attributes: Default::default(),
             labels: Vec::new(),
             privacy_class,
             identity_evidence: None,
@@ -646,6 +667,9 @@ mod tests {
                 vendor: "esp32_c6".into(),
                 device_id: "sensor_room_01".into(),
                 placement: "ceiling_corner".into(),
+                coordinate_frame: None,
+                position_m: None,
+                orientation_xyzw: None,
                 clock_domain: "local_ptp".into(),
             },
             sample_tensor(),
