@@ -417,7 +417,7 @@ impl EmbeddingBackend for InMemoryConformanceBackend {
         for (index, value) in request.values.iter().enumerate() {
             // Signed bucket folding is deterministic and deliberately simple.
             let bucket = index % self.output_dimensions;
-            let sign = if (index / self.output_dimensions) % 2 == 0 {
+            let sign = if (index / self.output_dimensions).is_multiple_of(2) {
                 1.0
             } else {
                 -1.0
@@ -440,6 +440,7 @@ fn modality_name(modality: Modality) -> &'static str {
         Modality::WifiCir => "wifi_cir",
         Modality::WifiBfld => "wifi_bfld",
         Modality::UwbHrp => "uwb_hrp",
+        Modality::BleAdvertisementRssi => "ble_advertisement_rssi",
         Modality::BleChannelSounding => "ble_channel_sounding",
         Modality::MmwaveRadar => "mmwave_radar",
         Modality::Ultrasonic => "ultrasonic",

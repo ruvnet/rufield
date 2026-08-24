@@ -15,9 +15,7 @@
 
 #![doc(html_root_url = "https://docs.rs/rufield-privacy/0.1.0")]
 
-use rufield_core::{
-    Destination, FieldEvent, PrivacyClass, PrivacyDecision, PrivacyGuard,
-};
+use rufield_core::{Destination, FieldEvent, PrivacyClass, PrivacyDecision, PrivacyGuard};
 
 /// Tunable privacy policy. Defaults match ADR-260 §10.
 #[derive(Debug, Clone, PartialEq, Eq)]

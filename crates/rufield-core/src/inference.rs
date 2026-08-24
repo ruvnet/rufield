@@ -201,6 +201,7 @@ mod tests {
             contradicting_events: vec![],
             privacy_class: PrivacyClass::P2,
             calibration_id: Some("cal".into()),
+            track_id: None,
             model_id: "rule.person_present".into(),
             produced_ns: 100,
             expires_ns: 200,
