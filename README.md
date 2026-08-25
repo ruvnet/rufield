@@ -23,6 +23,16 @@
 > no accuracy numbers). The other modalities (mmWave, thermal IR) remain
 > synthetic. Live-hardware streaming and labeled-accuracy validation remain
 > documented roadmap items.
+>
+> A second replay adapter, [`UltrasonicReplayAdapter`](#ultrasonic-replay),
+> covers `Modality::Ultrasonic` — registry code 7, which had been in the §8
+> registry since v0.1 with nothing implementing it. It ingests range profiles
+> from [BatVu](https://github.com/ruvnet/batvu), a handheld ultrasonic sonar
+> that runs in a phone browser. Same posture, and one more caveat: BatVu's
+> present recordings are its **own simulator's** output, so they are
+> `synthetic: true` and fusable only under simulation trust. The pipeline is
+> real and cross-checked against BatVu's emitter by a shared fixture; the
+> measurements are not yet from a phone.
 
 ---
 
@@ -63,7 +73,7 @@ The full specification of record is
 | [`rufield-core`](crates/rufield-core) | Data model + traits: `Modality` (15), `FieldAxis`, `FieldTensor`, `PrivacyClass` (P0–P5), `FieldEvent`, `Observation`, `CalibrationReceipt`, `FieldInference`, and the `FieldAdapter`/`FieldEncoder`/`FusionEngine`/`PrivacyGuard` traits. |
 | [`rufield-provenance`](crates/rufield-provenance) | Real `sha256` content hashing + `ed25519` sign/verify. ADR-261 adds explicit simulation, captured-replay, and production trust policies, an independently enrolled sensor-key registry, revocation, freshness checks, and persistent replay watermarks. The legacy `is_fusable` helper is simulation-only. |
 | [`rufield-privacy`](crates/rufield-privacy) | `PrivacyClass` policy + `DefaultPrivacyGuard`: P0 edge-only, network ≤ P2, P4 consent gate, P5 identity binding. |
-| [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter (camera-free room-intelligence demo across 3 modalities) **plus `CsiReplayAdapter`** — the first real (non-synthetic) adapter, replaying real captured WiFi CSI from a `.csi.jsonl` recording (replay, unlabeled). |
+| [`rufield-adapters`](crates/rufield-adapters) | Deterministic seeded `SyntheticSim` adapter (camera-free room-intelligence demo across 3 modalities), **`CsiReplayAdapter`** — the first real (non-synthetic) adapter, replaying real captured WiFi CSI from a `.csi.jsonl` recording (replay, unlabeled) — and **`UltrasonicReplayAdapter`**, the first adapter for `Modality::Ultrasonic`, replaying BatVu phone-sonar range profiles from a `.ultrasonic.jsonl` recording. |
 | [`rufield-fusion`](crates/rufield-fusion) | `FusionGraph` + `RuFieldFusion` engine with TOML rules (weighted-Bayes / temporal-window), confidence + expiry. |
 | [`rufield-bench`](crates/rufield-bench) | Deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations, and the ADR-260 §31 acceptance test. |
 | [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): room state, event log with privacy badges, fusion graph, and a synthetic-mode signed-receipt viewer. **Two sources** — `--source synthetic` (default) replays `SyntheticSim → RuFieldFusion`; `--source live --upstream <URL>` ingests **real** `FieldEvent`s over the RuView `/ws/field` / `/api/field` transport (ADR-262 P3). Live startup requires an independently enrolled sensor-key registry and an ADR-261 production or captured-replay policy. Live SSE uses a fail-closed public projection with stable trust diagnostics and no event/device/zone ids, raw labels, hashes, signer keys, signatures, model ids, or provenance edges. Honest, mutually-exclusive `SYNTHETIC` / `LIVE` / `DISCONNECTED` banner. Not a device-management console. |
@@ -279,6 +289,83 @@ while let Some(event) = adapter.next_event()? {
 > fused events from it.* Over the staged 199-frame real-CSI fixture this yields
 > presence/breathing inferences from real signal; live-hardware streaming and
 > labeled-accuracy validation remain roadmap.
+
+### Ultrasonic replay
+
+`UltrasonicReplayAdapter` is the first adapter for `Modality::Ultrasonic`
+(registry code 7). It replays a `.ultrasonic.jsonl` recording from
+[BatVu](https://github.com/ruvnet/batvu) — a handheld sonar that runs entirely
+in a phone browser, emitting a 17.5–20.5 kHz chirp and compressing the echo into
+a **range profile**: echo amplitude against distance along one beam.
+
+```rust
+use rufield_adapters::{UltrasonicConfig, UltrasonicOutput, UltrasonicReplayAdapter, UltrasonicSource};
+use rufield_core::{Destination, FieldAdapter, FusionEngine, PrivacyDecision};
+use rufield_fusion::RuFieldFusion;
+use rufield_privacy::DefaultPrivacyGuard;
+use rufield_provenance::TrustVerifier;
+
+let jsonl = std::fs::read_to_string("scan.ultrasonic.jsonl")?;
+
+// The deployment declares which source it will accept. A recording that
+// declares anything else is REFUSED rather than downgraded, so a file can
+// never talk its way into a higher trust tier by relabelling itself.
+let mut adapter = UltrasonicReplayAdapter::from_jsonl_with(
+    &jsonl,
+    UltrasonicConfig {
+        accept: UltrasonicSource::Simulated,
+        output: UltrasonicOutput::CoarseProfile, // P1, network-eligible
+        zone_id: "living_room".into(),
+        placement: "handheld".into(),
+    },
+)?;
+
+let receipt = adapter.calibrate("living_room")?;
+println!("calibration: {} ({})", receipt.calibration_id, receipt.data_hash);
+
+let mut trust = TrustVerifier::simulation();
+let guard = DefaultPrivacyGuard::default();
+let mut engine = RuFieldFusion::new();
+while let Some(event) = adapter.next_event()? {
+    trust.verify_and_record_at(&event, event.timestamp_ns)?;
+    if guard.authorize_event(&event, Destination::Network, false, false) == PrivacyDecision::Allow {
+        engine.ingest(event)?;
+    }
+}
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+**Two output modes, and the default is the safe one.** The full per-bin range
+profile is a sensor frame and is classified **P0**, which the stock privacy
+policy denies to a network and permits edge-local.
+`UltrasonicOutput::CoarseProfile` — the default — max-pools it to 32 bins, which
+describes a room's shape without reconstructing the waveform, and is **P1**.
+Max-pooling rather than averaging is deliberate: a mean smears a sharp echo into
+its neighbours and a wall stops looking like a wall.
+
+**Why the tensor is `[Range]` and not `[Angle, Range]`.** `FieldAxis::Angle`
+means angle-of-arrival bins — the output of an array that measured direction.
+BatVu has one microphone. It measures range; the direction on an echo is where
+the operator was pointing the phone, which is pose, and it rides in
+`SensorDescriptor::orientation_xyzw` where a pose belongs.
+
+> **Honest caveats (read these).** Replay from a file, not live streaming.
+> Every current BatVu recording is its own **simulator's** output, so the events
+> are `synthetic: true` and `TrustPolicy::captured_replay()` and
+> `production()` reject them outright — as they should. The adapter sets
+> `features["range_m"]` and deliberately does **not** set `features["presence"]`:
+> one transducer pair cannot distinguish a person from a coat on a chair, and a
+> range-only sensor reporting presence would be asserting exactly that.
+>
+> A consequence worth stating plainly: **with the shipped `room_state.toml`,
+> ultrasonic events produce no inferences at all.** No rule lists `"ultrasonic"`
+> among its inputs, and adding one would not help — the engine's feature
+> vocabulary (`motion_energy`, `breathing_band`, `transient`, `presence`,
+> `posture_sit`, `posture_lie`) is entirely statements about a body, and
+> `range_m` has no `feat` arm. RuField v0.1 has no predicate for static
+> geometry. `tests/ultrasonic_fusion.rs` asserts that outcome rather than
+> papering over it; closing the gap is a change to `rufield-fusion`, not to an
+> adapter.
 
 ## User guide
 

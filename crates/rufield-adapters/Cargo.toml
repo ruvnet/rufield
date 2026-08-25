@@ -19,6 +19,7 @@ sha2 = { workspace = true }
 [dev-dependencies]
 rufield-provenance = { workspace = true }
 rufield-fusion = { workspace = true }
+rufield-privacy = { workspace = true }
 
 [lints]
 workspace = true

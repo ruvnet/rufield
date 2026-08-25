@@ -42,6 +42,7 @@ pub mod rng;
 pub mod scenario;
 pub mod signals;
 pub mod sim;
+pub mod ultrasonic;
 
 pub use ble::{
     derive_ble_pseudonym, BleAbstention, BleAbstentionReason, BleAdapterConfig, BleAdapterError,
@@ -67,4 +68,10 @@ pub use signals::SignalFeatures;
 pub use sim::{
     default_destination, run_demo, SimConfig, SimError, SimEvent, SyntheticSim, BASE_TS_NS,
     DEFAULT_SEED, TICK_NS,
+};
+pub use ultrasonic::{
+    Baseline as UltrasonicBaseline, Echo, UltrasonicConfig, UltrasonicError, UltrasonicOutput,
+    UltrasonicPing, UltrasonicReplayAdapter, UltrasonicSource, COARSE_BINS,
+    DEFAULT_CALIBRATION_PINGS, MAX_DETECTIONS, MAX_LINE_BYTES, MAX_PINGS, MAX_PROFILE_BINS,
+    MAX_RANGE_M, ULTRASONIC_SIGNER_SEED,
 };
