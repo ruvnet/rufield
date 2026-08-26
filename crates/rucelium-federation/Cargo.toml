@@ -1,0 +1,22 @@
+[package]
+name = "rucelium-federation"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium biome sovereignty: outage buffer with duplicate-free replay, signed regional summaries, device revocation, disclosure coarsening, OGC SensorThings projection (ADR-264 §6/§7/§10)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "federation", "sensorthings", "sovereignty"]
+categories = ["science"]
+
+[dependencies]
+rucelium-core = { workspace = true }
+rucelium-ingest = { workspace = true }
+rucelium-abi = { workspace = true }
+ed25519-dalek = { workspace = true }
+sha2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

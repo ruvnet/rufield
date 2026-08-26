@@ -1,0 +1,29 @@
+[package]
+name = "rucelium-bench"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium deterministic 64-node biome benchmark: 30 simulated days, 7-day offline partition, tamper/replay rejection, revocation continuity, calibrated-observation yield — the ADR-264 §14 acceptance test (SYNTHETIC)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "benchmark", "simulation"]
+categories = ["science"]
+
+[[bin]]
+name = "rucelium-bench"
+path = "src/main.rs"
+
+[dependencies]
+rucelium-core = { workspace = true }
+rucelium-abi = { workspace = true }
+rucelium-ingest = { workspace = true }
+rucelium-calibration = { workspace = true }
+rucelium-worldgraph = { workspace = true }
+rucelium-policy = { workspace = true }
+rucelium-federation = { workspace = true }
+rufield-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

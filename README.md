@@ -78,6 +78,99 @@ The full specification of record is
 | [`rufield-bench`](crates/rufield-bench) | Deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations, and the ADR-260 §31 acceptance test. |
 | [`rufield-viewer`](crates/rufield-viewer) | Read-only web dashboard (Axum + vanilla JS, no build step): room state, event log with privacy badges, fusion graph, and a synthetic-mode signed-receipt viewer. **Two sources** — `--source synthetic` (default) replays `SyntheticSim → RuFieldFusion`; `--source live --upstream <URL>` ingests **real** `FieldEvent`s over the RuView `/ws/field` / `/api/field` transport (ADR-262 P3). Live startup requires an independently enrolled sensor-key registry and an ADR-261 production or captured-replay policy. Live SSE uses a fail-closed public projection with stable trust diagnostics and no event/device/zone ids, raw labels, hashes, signer keys, signatures, model ids, or provenance edges. Honest, mutually-exclusive `SYNTHETIC` / `LIVE` / `DISCONNECTED` banner. Not a device-management console. |
 
+## RuCelium — federated environmental intelligence fabric
+
+[ADR-264](./docs/ADR-264-rucelium-federated-fabric.md) extends the stack
+from room-scale field sensing to planetary environmental sensing — **not** as
+a flat global peer mesh (which fails on battery, bandwidth, routing,
+calibration, sovereignty, and compromised nodes) but as a **federated fabric**
+with four layers:
+
+```text
+Layer 4  Planetary federation   discovery + aggregates (OGC SensorThings), no ownership
+Layer 3  Biome regions          sovereign owners of data, models, actuators
+Layer 2  Rhizome gateways       Rust: verify, normalize, calibrate, fuse, buffer, govern
+Layer 1  Spore nodes            C: sense, fixed-point calibrate, sign, transmit
+```
+
+C stays confined to the sensor boundary (drivers, fixed-point DSP,
+serialization, transport — see
+[`rucelium_env.h`](crates/rucelium-abi/include/rucelium_env.h));
+everything above it is safe Rust. RuView RF joins as a **contextual modality**
+— supporting evidence with a hard `Advisory` severity cap, never ground truth.
+
+| Crate | Description |
+|-------|-------------|
+| [`rucelium-core`](crates/rucelium-core) | Domain model: `EnvSample` (twelve mandatory attributes), `EnvFrame`, `CalibrationRecord` (Q16.16, lineage-chained), `EnvironmentalEvent`, `SensorModality` (10), `GeoPoint` with exact privacy coarsening, three-tier `DataClass` residency. |
+| [`rucelium-abi`](crates/rucelium-abi) | The versioned C ABI: packed 48-byte `rv_env_sample_v1`, bounds-checked allocation-free parse (no `unsafe`), deterministic CBOR (canonical heads enforced), COSE-inspired signed envelope, ed25519 device keys. |
+| [`rucelium-ingest`](crates/rucelium-ingest) | Gateway ingest: envelope decode → registry/revocation → signature verify → anti-replay window → normalized `EnvSample`. Forged packets can't burn sequence numbers. |
+| [`rucelium-calibration`](crates/rucelium-calibration) | Calibration lineage (anchor-rooted chains), affine application with stated uncertainty, EWMA drift detection, **quarantine — never silent correction**. |
+| [`rucelium-worldgraph`](crates/rucelium-worldgraph) | Environmental WorldGraph: typed sensor/ecosystem/region/anchor nodes, geospatial queries, evidence + contradiction edges, RuView `FieldEvent` RF-context bridge (weight-capped). |
+| [`rucelium-policy`](crates/rucelium-policy) | The ADR-264 §9 governed control path — proposal → policy → safety sim → authority → signed command → gateway validation → receipt — typed so **no stage can be skipped**. |
+| [`rucelium-federation`](crates/rucelium-federation) | Biome sovereignty: outage buffer with duplicate-free replay, signed regional summaries, device revocation, disclosure coarsening + delay, OGC SensorThings 1.1 projection. |
+| [`rucelium-bench`](crates/rucelium-bench) | Deterministic **SYNTHETIC** 64-node biome benchmark: 30 simulated days, 7-day offline partition, tamper/replay attack rejection, mid-run revocation — the ADR-264 §14 **fabric reference-model** acceptance test (in-memory library components; the runtime path — store/transport/gateway — is covered by `rucelium-gateway`'s own e2e and restart-attack tests). |
+
+Run the biome acceptance benchmark:
+
+```bash
+cargo run -p rucelium-bench            # default seed
+cargo run -p rucelium-bench -- 2026    # custom seed
+cargo run -p rucelium-bench -- 2026 --json
+```
+
+> **Honesty note:** like the RuField numbers, the RuCelium scorecard is
+> produced by a deterministic synthetic biome simulator and labelled
+> **SYNTHETIC** — it proves the fabric's mechanics (signatures, replay
+> windows, dedup, quarantine, revocation, projection) against known ground
+> truth. It is not a field deployment.
+
+### Runtime — run a gateway (ADR-265)
+
+The fabric is not only libraries — it runs. [ADR-265](./docs/ADR-265-rucelium-runtime.md)
+adds the runtime layer:
+
+| Crate | Description |
+|-------|-------------|
+| [`rucelium-store`](crates/rucelium-store) | Durable append-only segmented store: dedup index rebuilt on open, torn-tail crash recovery, deterministic replay, per-DataClass retention that deletes whole expired segments. |
+| [`rucelium-transport`](crates/rucelium-transport) | Constrained-link transport: compact **114-byte envelope v2** (pubkey by reference — v1's ~150 bytes doesn't fit LoRaWAN DR0's 51-byte cap) + MTU fragmentation/reassembly (exactly 3 DR0 datagrams per envelope, loss/duplication/reorder tolerant). |
+| [`rucelium-gateway`](crates/rucelium-gateway) | The rhizome daemon: UDP envelope ingestion (v1/v2/fragments) → signature + anti-replay → calibration + quarantine → disk → WorldGraph → local alerts, an OGC SensorThings HTTP API, and **federation sync** — peers exchange only signed summaries and revocations, verified before use. |
+
+```bash
+# Start a gateway with a built-in synthetic spore swarm (no hardware, SYNTHETIC):
+cargo run -p rucelium-gateway -- --simulate 16
+
+# Then:
+curl -s localhost:7465/api/stats | jq
+curl -s localhost:7465/api/sensorthings/Observations | jq '.value[0]'
+
+# Two-biome federation on one machine:
+cargo run -p rucelium-gateway -- --biome-id biome/a --udp 7464 --http 7465
+cargo run -p rucelium-gateway -- --biome-id biome/b --udp 7474 --http 7475 \
+    --peer http://127.0.0.1:7465
+```
+
+`rucelium-abi` also gains a `std` default feature: with
+`--no-default-features --features alloc` the wire format + deterministic CBOR
+compile for `no_std` targets, so Rust-based spore nodes can share the encoder.
+
+### Metaharness — the Darwin flywheel
+
+[`harness/`](harness) ships **`rucelium-harness`**, a zero-dependency npm
+CLI that turns the implementation process itself into a selection loop
+(vary → evaluate → select → retain). Fitness is derived from the same
+commands CI runs — workspace tests, clippy, and the ADR-264 §14 acceptance
+benchmark — and surviving generations are retained in an append-only ledger:
+
+```bash
+node harness/bin/rucelium.js fitness              # score the working tree (0..100)
+node harness/bin/rucelium.js evolve -m "message"  # select vs the ledger head
+node harness/bin/rucelium.js ledger               # lineage of surviving generations
+node harness/bin/rucelium.js gate                 # strict §14 acceptance gate (CI)
+```
+
+A change that lowers fitness is **rejected** (not recorded) unless the
+regression is recorded deliberately — see [`harness/README.md`](harness/README.md).
+
 ## Install / Quickstart
 
 This repository is a standalone Cargo workspace. The fastest way to see it

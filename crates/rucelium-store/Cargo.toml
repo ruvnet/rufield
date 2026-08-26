@@ -1,0 +1,18 @@
+[package]
+name = "rucelium-store"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium durable gateway store: append-only segment log with dedup index, crash recovery, deterministic replay, and per-DataClass retention enforcement (ADR-265 §3)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "storage", "log", "retention"]
+categories = ["science", "database-implementations"]
+
+[dependencies]
+rucelium-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

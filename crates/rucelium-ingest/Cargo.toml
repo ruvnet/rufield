@@ -1,0 +1,19 @@
+[package]
+name = "rucelium-ingest"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium rhizome-gateway ingest pipeline: envelope decode, signature + revocation + replay-window checks, normalization into EnvSample (ADR-264 §5)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "gateway", "ingest", "security"]
+categories = ["science"]
+
+[dependencies]
+rucelium-core = { workspace = true }
+rucelium-abi = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

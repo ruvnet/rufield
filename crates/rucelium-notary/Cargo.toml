@@ -1,0 +1,25 @@
+[package]
+name = "rucelium-notary"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium long-term provenance: domain-separated Merkle notarization with inclusion proofs and algorithm-agile root signing, amortizing post-quantum signature cost to bytes per observation (ADR-267)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["provenance", "merkle", "post-quantum", "archival", "environmental"]
+categories = ["science", "cryptography"]
+
+[dependencies]
+rucelium-core = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+serde = { workspace = true }
+# `float_roundtrip` is load-bearing, not an optimization: without it serde_json
+# parses a decimal like `23.470000000000002` to a f64 one ULP away from the
+# value that printed it, so an archived evidence bundle would not rehash to its
+# own leaf after a JSON round trip. ADR-267's whole claim is that bytes stored
+# in 2026 still verify in 2040 — exact float round-tripping is a precondition.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+
+[lints]
+workspace = true

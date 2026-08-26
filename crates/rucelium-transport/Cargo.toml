@@ -1,0 +1,17 @@
+[package]
+name = "rucelium-transport"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium constrained-link transport: compact 114-byte envelope v2 (pubkey by reference) and MTU fragmentation/reassembly sized for LoRaWAN DR0's 51-byte payload cap (ADR-265 §2)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "lorawan", "fragmentation", "iot"]
+categories = ["science", "embedded", "network-programming"]
+
+[dependencies]
+rucelium-abi = { workspace = true }
+ed25519-dalek = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "rucelium-core"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium federated environmental fabric core data model: EnvSample, EnvFrame, CalibrationRecord, EnvironmentalEvent, SensorModality, GeoPoint, DataClass (ADR-264 §5/§7/§10)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+keywords = ["environmental", "sensing", "federation", "iot", "calibration"]
+categories = ["science"]
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+# Content-binding digest for EnvironmentalEvent::evidence_digest.
+sha2 = { workspace = true }
+
+[lints]
+workspace = true

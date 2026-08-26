@@ -1,0 +1,27 @@
+[package]
+name = "rucelium-examples"
+version.workspace = true
+edition.workspace = true
+description = "RuCelium worked applications: runnable, tested end-to-end scenarios for the practical deployment wedges and the biological research track (ADR-266)"
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+keywords = ["environmental", "examples", "flood", "biodiversity"]
+categories = ["science"]
+
+[dependencies]
+rucelium-core = { workspace = true }
+rucelium-abi = { workspace = true }
+rucelium-transport = { workspace = true }
+rucelium-ingest = { workspace = true }
+rucelium-calibration = { workspace = true }
+rucelium-worldgraph = { workspace = true }
+rucelium-federation = { workspace = true }
+rucelium-policy = { workspace = true }
+rucelium-store = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
