@@ -4,13 +4,17 @@ Status: Proposed
 
 Date: 2026-09-07
 
+Last reviewed: 2026-09-14
+
 Issue: #14
 
 ## Context
 
 RuField normalizes sensing evidence before projecting it into external interoperability envelopes. ADR 268 added deterministic CloudEvents 1.0 and SOSA JSON LD projections and intentionally treats IEEE 802.11bf and Bluetooth Channel Sounding as source identifiers rather than protocol or certification claims.
 
-The service and application layers around integrated sensing and communications are moving independently of radio acquisition formats. During the week ending 2026-09-07, 3GPP TS 23.138, Use of sensing results for Vertical Applications, advanced to draft 0.2.0 on 2026-09-02; 3GPP TS 29.545, Sensing Function Services Stage 3, advanced to draft 0.2.0 on 2026-09-04; and ETSI GR ISC 009, Demonstrability, Adoption, and Technology Evolution for ISAC, advanced to early draft 0.0.3 on 2026-09-02.
+The service and application layers around integrated sensing and communications move independently of radio acquisition formats. During the week ending 2026-09-07, 3GPP TS 23.138 advanced to draft 0.2.0 on 2026-09-02, 3GPP TS 29.545 advanced to draft 0.2.0 on 2026-09-04, and ETSI GR ISC 009 advanced to early draft 0.0.3 on 2026-09-02.
+
+The 2026-09-14 review found a further material change: the official 3GPP portal lists TS 23.138 version 1.0.0 uploaded for SA#113 on 2026-09-08 while the specification remains marked Draft for Release 20. This is therefore represented as an exact external reference, not as a finality, implementation, certification, or compliance claim. TS 29.545 remains Draft 0.2.0 on the public portal. ETSI GR ISC 009 remains early draft 0.0.3.
 
 These documents may inform a RuField integration even when the underlying measurement comes from native WiFi CSI, IEEE 802.11bf, Bluetooth Channel Sounding, UWB, radar, ultrasonic, or another modality.
 
@@ -34,6 +38,7 @@ RuField needs a way to cite evolving standards without changing native `FieldEve
 * No input can manufacture a compliance or certification state.
 * Serialization remains deterministic for the same typed value.
 * The change introduces no new dependency.
+* A numeric standards version must not be interpreted as a maturity or conformance state.
 
 ## Options considered
 
@@ -47,7 +52,7 @@ Rejected for now. This would put external interoperability metadata into the cor
 
 ### Free form metadata map on each envelope
 
-Rejected. It is difficult to bound, validate, fuzz, and reason about security properties of arbitrary keys and values. It would also weaken deterministic semantics.
+Rejected. Arbitrary keys and values are difficult to bound, validate, fuzz, and reason about. They also weaken deterministic semantics.
 
 ### Add a typed, bounded `StandardsReference` list to interop envelopes
 
@@ -55,14 +60,14 @@ Selected. Acquisition provenance remains in `SourceProfile`; other standards rel
 
 ## Prior art and standards
 
-* IEEE 802.11bf 2025 WLAN sensing is already represented by an acquisition source identifier under ADR 268.
-* Bluetooth Core 6.0 Channel Sounding is already represented by an acquisition source identifier under ADR 268.
-* 3GPP TS 23.138 Release 20 draft describes use of sensing results for vertical applications.
-* 3GPP TS 29.545 Release 20 draft describes Sensing Function Services Stage 3.
-* ETSI GR ISC 009 addresses demonstrability, adoption, evaluation, and use of existing infrastructure for ISAC.
+* IEEE 802.11bf 2025 WLAN sensing is represented by an acquisition source identifier under ADR 268.
+* Bluetooth Core 6.0 Channel Sounding is represented by an acquisition source identifier under ADR 268.
+* 3GPP TS 23.138 Release 20 describes use of sensing results for vertical applications. The public portal lists version 1.0.0 at SA#113 on 2026-09-08 and still marks the specification Draft.
+* 3GPP TS 29.545 Release 20 Draft 0.2.0 describes Sensing Function Services Stage 3.
+* ETSI GR ISC 009 early draft 0.0.3 addresses demonstrability, adoption, evaluation, and use of existing infrastructure for ISAC.
 * ETSI GR ISC 003 separates sensing service control, measurement coordination, processing, storage, and result exposure in its architecture.
 
-The referenced drafts are inputs to interoperability design, not normative claims by RuField.
+The referenced documents are inputs to interoperability design, not normative claims by RuField.
 
 ## Decision
 
@@ -98,7 +103,7 @@ CloudEvents 1.0             SOSA JSON LD
               metadata only
 ```
 
-`StandardsReference` is not part of `FieldEvent` and cannot modify tensor, observation, privacy, calibration, or provenance state.
+`StandardsReference` is not part of `FieldEvent` and cannot modify tensor, observation, privacy, calibration, provenance, or trust state.
 
 ## Interfaces
 
@@ -107,6 +112,8 @@ CloudEvents 1.0             SOSA JSON LD
 Inbound CloudEvents and SOSA projections validate every attached reference before returning the native event.
 
 The implementation bounds the list to 16 references, document identifiers to 96 bytes, versions to 32 bytes, and release or stage descriptions to 48 bytes. It rejects empty strings, leading or trailing whitespace, control characters, malformed dates, and any `compliance_claim = true`.
+
+A reference such as TS 23.138 `1.0.0` may carry `Release 20 draft; SA#113` as its stage descriptor. The version string is factual metadata only.
 
 ## Data flow
 
@@ -123,12 +130,13 @@ External standards metadata is attacker controlled at trust boundaries.
 
 The implementation therefore:
 
-* bounds list size and string length before accepting the metadata semantically
+* bounds list size and string length before accepting metadata semantically
 * rejects control characters that could corrupt logs or downstream text protocols
 * rejects unknown enum values through Serde
 * rejects malformed date shapes
 * refuses compliance claims on both emit and ingest paths
 * preserves native event provenance independently of the reference metadata
+* does not derive trust, authorization, certification, or privacy state from a standards version number
 
 Future signed interop envelopes should include standards references in the signed bytes. This ADR does not introduce a new signature layer.
 
@@ -150,7 +158,7 @@ None. This change is confined to the Rust interoperability layer.
 
 Backward compatible at the serialized fixture level when no references are attached. Existing constructors and `SourceProfile` identifiers are unchanged.
 
-The Rust public `CloudEvent` and `SosaObservation` structs gain additive fields, so downstream code using exhaustive struct literals may need to add the new field. This is a source compatibility consideration and must be called out in the PR.
+The Rust public `CloudEvent` and `SosaObservation` structs gain additive fields, so downstream code using exhaustive struct literals may need to add the new field. This source compatibility effect is documented in the pull request.
 
 ## Migration
 
@@ -164,18 +172,21 @@ Applications deserializing old interop envelopes receive an empty reference list
 * changing the native RuField wire version
 * adding arbitrary metadata maps
 * introducing a dedicated 3GPP or ETSI protocol dependency before a concrete protocol implementation exists
+* converting a portal version transition into an automatic compliance state
 
 ## Risks
 
-* Consumers may still visually interpret a standards reference as compliance despite the typed invariant. Documentation and UI must use wording such as `reference`, not `compliant`.
+* Consumers may visually interpret a standards reference as compliance despite the typed invariant. Documentation and UI must use wording such as `reference`, not `compliant`.
 * A future standards document may require fields not represented here. Add typed roles or fields only when concrete interoperability work demands them.
-* Calendar date validation is intentionally structural and bounds month and day but is not a full Gregorian calendar implementation. It introduces no date parsing dependency.
+* Calendar date validation is intentionally structural and bounds month and day but is not a full Gregorian calendar implementation.
+* External standards portals can revise metadata. Weekly research updates must preserve the exact reference date used by an artifact.
 
 ## Open questions
 
 * Should a future signed CloudEvent wrapper bind the reference list into an external detached signature in addition to the native event receipt?
-* Should finalized standards versions receive convenience constructors after their semantics stabilize?
+* Should stable standards versions receive convenience constructors after their semantics stabilize?
 * Is a separate service profile projection needed once TS 29.545 interfaces mature beyond draft status?
+* Should `StandardsReference` gain a separately typed document status field instead of carrying status in `release_or_stage`?
 
 ## Benchmark plan
 
@@ -192,8 +203,9 @@ No performance improvement is claimed by this ADR. The success condition is boun
 ## Acceptance criteria
 
 * Existing no reference golden fixtures remain byte identical.
-* TS 23.138 0.2.0, TS 29.545 0.2.0, and ETSI GR ISC 009 0.0.3 can be represented as metadata.
-* `compliance_claim = true` is rejected.
+* TS 23.138 1.0.0 with reference date 2026-09-08 can be represented while preserving the portal Draft status in stage metadata.
+* TS 29.545 0.2.0 and ETSI GR ISC 009 0.0.3 can be represented as metadata.
+* `compliance_claim = true` is rejected for all versions.
 * Oversized and control character inputs are rejected.
 * More than 16 references are rejected.
 * Native `FieldEvent` round trips unchanged.
