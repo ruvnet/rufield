@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fmt;
 
+pub mod routing;
+
 /// Backend neutral request passed across the integration seam.
 #[derive(Debug, Clone, PartialEq)]
 pub struct EmbeddingRequest<'a> {

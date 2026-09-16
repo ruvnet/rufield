@@ -41,3 +41,9 @@ jobs:
 
       - name: Run deterministic benchmark
         run: cargo run -p rufield-bench -- 2026
+
+      - name: Trusted routing SDK contract
+        run: python3 harness/routing/run.py
+
+      - name: Routing verification and projection benchmark
+        run: cargo run --release -p rufield-ruvector --example routing_bench

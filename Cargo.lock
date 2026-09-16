@@ -973,6 +973,7 @@ name = "rufield-ruvector"
 version = "0.1.0"
 dependencies = [
  "rufield-core",
+ "rufield-provenance",
  "serde",
  "serde_json",
  "sha2",
