@@ -4,7 +4,7 @@ Status: Proposed
 
 Date: 2026-09-07
 
-Last reviewed: 2026-09-14
+Last reviewed: 2026-09-28
 
 Issue: #14
 
@@ -14,7 +14,7 @@ RuField normalizes sensing evidence before projecting it into external interoper
 
 The service and application layers around integrated sensing and communications move independently of radio acquisition formats. During the week ending 2026-09-07, 3GPP TS 23.138 advanced to draft 0.2.0 on 2026-09-02, 3GPP TS 29.545 advanced to draft 0.2.0 on 2026-09-04, and ETSI GR ISC 009 advanced to early draft 0.0.3 on 2026-09-02.
 
-The 2026-09-14 review found a further material change: the official 3GPP portal lists TS 23.138 version 1.0.0 uploaded for SA#113 on 2026-09-08 while the specification remains marked Draft for Release 20. This is therefore represented as an exact external reference, not as a finality, implementation, certification, or compliance claim. TS 29.545 remains Draft 0.2.0 on the public portal. ETSI GR ISC 009 remains early draft 0.0.3.
+The 2026-09-14 review found a further material change: the official 3GPP portal lists TS 23.138 version 1.0.0 uploaded for SA#113 on 2026-09-08 while the specification remains marked Draft for Release 20. This is therefore represented as an exact external reference, not as a finality, implementation, certification, or compliance claim. TS 29.545 remains Draft 0.2.0 on the public portal. ETSI GR ISC 009 remains early draft 0.0.3.\n\nThe 2026-09-28 review found that 3GPP TS 23.137 advanced to version 20.0.0 and Under change control on 2026-09-24. RuField records that controlled Stage 2 management and orchestration baseline as bounded SensingService metadata. Under change control means a controlled baseline that can still receive change requests; it is not certification or proof of RuField compliance.
 
 These documents may inform a RuField integration even when the underlying measurement comes from native WiFi CSI, IEEE 802.11bf, Bluetooth Channel Sounding, UWB, radar, ultrasonic, or another modality.
 
@@ -62,7 +62,7 @@ Selected. Acquisition provenance remains in `SourceProfile`; other standards rel
 
 * IEEE 802.11bf 2025 WLAN sensing is represented by an acquisition source identifier under ADR 268.
 * Bluetooth Core 6.0 Channel Sounding is represented by an acquisition source identifier under ADR 268.
-* 3GPP TS 23.138 Release 20 describes use of sensing results for vertical applications. The public portal lists version 1.0.0 at SA#113 on 2026-09-08 and still marks the specification Draft.
+* 3GPP TS 23.137 Release 20 version 20.0.0 is the controlled Stage 2 management and orchestration baseline recorded on 2026-09-24.\n* 3GPP TS 23.138 Release 20 describes use of sensing results for vertical applications. The public portal lists version 1.0.0 at SA#113 on 2026-09-08 and still marks the specification Draft.
 * 3GPP TS 29.545 Release 20 Draft 0.2.0 describes Sensing Function Services Stage 3.
 * ETSI GR ISC 009 early draft 0.0.3 addresses demonstrability, adoption, evaluation, and use of existing infrastructure for ISAC.
 * ETSI GR ISC 003 separates sensing service control, measurement coordination, processing, storage, and result exposure in its architecture.
@@ -203,7 +203,7 @@ No performance improvement is claimed by this ADR. The success condition is boun
 ## Acceptance criteria
 
 * Existing no reference golden fixtures remain byte identical.
-* TS 23.138 1.0.0 with reference date 2026-09-08 can be represented while preserving the portal Draft status in stage metadata.
+* TS 23.137 20.0.0 with reference date 2026-09-24 can be represented while preserving Under change control in stage metadata.\n* TS 23.138 1.0.0 with reference date 2026-09-08 can be represented while preserving the portal Draft status in stage metadata.
 * TS 29.545 0.2.0 and ETSI GR ISC 009 0.0.3 can be represented as metadata.
 * `compliance_claim = true` is rejected for all versions.
 * Oversized and control character inputs are rejected.
@@ -218,7 +218,7 @@ Remove the optional reference fields and explicit reference constructors. Native
 
 ## References
 
-* https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=5529
+* https://www.3gpp.org/dynareport/23137.htm\n* https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=5529
 * https://portal.3gpp.org/desktopmodules/Specifications/SpecificationDetails.aspx?specificationId=5533
 * https://portal.etsi.org/Portal_WI/Form1.asp?NbToDisplay=30&PersonId=0&SubTB=&SupCrit=F5G+++++++++++++++++++++++4678284&TabId=&TbId=0&WIcritID=18
 * ETSI GR ISC 003, Integrated Sensing And Communications, System and RAN Architectures
