@@ -15,6 +15,7 @@
 
 pub mod error;
 pub mod event;
+pub mod freshness;
 pub mod inference;
 pub mod modality;
 pub mod privacy;
@@ -28,6 +29,9 @@ pub use event::{
     IdentityEvidenceKind, Observation, ProvenanceRef, PseudonymousId, SensorDescriptor,
     MAX_CHANNEL_SOUNDING_CHANNELS, MAX_CHANNEL_SOUNDING_CHANNEL_INDEX,
     MAX_IDENTITY_EVIDENCE_TTL_NS, MIN_CHANNEL_SOUNDING_CHANNELS, MIN_IDENTITY_EVIDENCE_CONFIDENCE,
+};
+pub use freshness::{
+    assess_evidence_freshness, FreshnessAssessment, FreshnessDisposition, FreshnessPolicy,
 };
 pub use inference::{
     AbstentionReason, CalibratedInference, CalibrationContext, FieldEmbedding, FieldInference,
