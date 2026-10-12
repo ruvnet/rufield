@@ -147,7 +147,9 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, ProvenanceError> {
         return Err(ProvenanceError::BadEncoding("odd hex length".into()));
     }
     bytes
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| {
             let high = hex_nibble(pair[0])?;
             let low = hex_nibble(pair[1])?;

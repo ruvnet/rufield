@@ -33,6 +33,12 @@ jobs:
       - name: Build
         run: cargo build --workspace --all-targets
 
+      - name: Validate Claude plugin packaging
+        run: python3 scripts/validate-plugin.py
+
+      - name: HTTP and SSE end-to-end smoke
+        run: python3 scripts/verify-e2e.py
+
       - name: Test
         run: cargo test --workspace
 

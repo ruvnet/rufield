@@ -269,3 +269,12 @@ async fn index_html_default_banner_is_synthetic_and_switchable() {
     assert!(body.contains(r#"id="source-banner""#));
     assert!(body.contains(r#"data-state="synthetic""#));
 }
+
+#[tokio::test]
+async fn live_without_ingest_never_falls_back_to_synthetic_events() {
+    let (status, body) = get_on(app_no_ingest(live_config()), "/events").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("\"synthetic\":false"));
+    assert!(body.contains("disconnected"));
+    assert!(!body.contains("event: frame"));
+}

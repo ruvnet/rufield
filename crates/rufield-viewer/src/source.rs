@@ -264,29 +264,72 @@ async fn stream_ws(
     state.set_connected(true);
 
     let mut delivered = 0usize;
-    let mut buf = String::new();
+    let mut decoder = SseDecoder::default();
     let mut body = resp.bytes_stream();
     while let Some(chunk) = body.next().await {
         let bytes = match chunk {
             Ok(b) => b,
             Err(_) => break,
         };
-        buf.push_str(&String::from_utf8_lossy(&bytes));
-        // SSE frames are separated by a blank line; each has `data:` lines.
-        while let Some(pos) = buf.find("\n\n") {
-            let raw = buf[..pos].to_string();
-            buf.drain(..pos + 2);
-            if let Some(data) = parse_sse_data(&raw) {
-                if let Ok(frame) = frame_from_ws_event(processor, *tick, &data, unix_now_ns()) {
-                    *tick += 1;
-                    delivered += 1;
-                    let _ = tx.send(frame);
-                }
+        let frames = match decoder.push(&bytes) {
+            Ok(frames) => frames,
+            Err(()) => break,
+        };
+        for data in frames {
+            if let Ok(frame) = frame_from_ws_event(processor, *tick, &data, unix_now_ns()) {
+                *tick += 1;
+                delivered += 1;
+                let _ = tx.send(frame);
             }
         }
     }
     state.set_connected(false);
     Ok(delivered)
+}
+
+// Bound retained upstream data before JSON parsing. Limits apply independently
+// to each SSE event and each polled API response.
+const MAX_UPSTREAM_BYTES: usize = 4 * 1024 * 1024;
+
+#[derive(Default)]
+struct SseDecoder {
+    line: Vec<u8>,
+    event: Vec<u8>,
+    after_cr: bool,
+}
+
+impl SseDecoder {
+    fn push(&mut self, bytes: &[u8]) -> Result<Vec<String>, ()> {
+        let mut frames = Vec::new();
+        for &byte in bytes {
+            if self.after_cr && byte == b'\n' {
+                self.after_cr = false;
+                continue;
+            }
+            self.after_cr = byte == b'\r';
+            if byte == b'\r' || byte == b'\n' {
+                if self.line.is_empty() {
+                    let raw = std::str::from_utf8(&self.event).map_err(|_| ())?;
+                    if let Some(data) = parse_sse_data(raw) {
+                        frames.push(data);
+                    }
+                    self.event.clear();
+                } else {
+                    if self.event.len() + self.line.len() + 1 > MAX_UPSTREAM_BYTES {
+                        return Err(());
+                    }
+                    self.event.append(&mut self.line);
+                    self.event.push(b'\n');
+                }
+            } else {
+                if self.event.len() + self.line.len() >= MAX_UPSTREAM_BYTES {
+                    return Err(());
+                }
+                self.line.push(byte);
+            }
+        }
+        Ok(frames)
+    }
 }
 
 /// Extract the concatenated `data:` payload from one raw SSE frame, ignoring
@@ -298,7 +341,7 @@ fn parse_sse_data(raw: &str) -> Option<String> {
             if !data.is_empty() {
                 data.push('\n');
             }
-            data.push_str(rest.trim_start());
+            data.push_str(rest.strip_prefix(' ').unwrap_or(rest));
         }
     }
     if data.is_empty() {
@@ -318,12 +361,27 @@ async fn poll_api_once(
     tick: &mut usize,
     processor: &mut LiveProcessor,
 ) -> bool {
-    let body = match client.get(url).send().await {
-        Ok(r) if r.status().is_success() => match r.text().await {
-            Ok(t) => t,
-            Err(_) => return false,
-        },
+    use futures_util::StreamExt;
+
+    let response = match client.get(url).send().await {
+        Ok(response) if response.status().is_success() => response,
         _ => return false,
+    };
+    let mut bytes = Vec::new();
+    let mut stream = response.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = match chunk {
+            Ok(chunk) => chunk,
+            Err(_) => return false,
+        };
+        if chunk.len() > MAX_UPSTREAM_BYTES - bytes.len() {
+            return false;
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    let body = match String::from_utf8(bytes) {
+        Ok(body) => body,
+        Err(_) => return false,
     };
     match frame_from_api_payload(processor, *tick, &body, unix_now_ns()) {
         Ok(frame) => {
@@ -351,6 +409,69 @@ fn unix_now_ns() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn oversized_valid_api_json_is_rejected_before_processing() {
+        use rufield_provenance::{Signer, TrustedKeyRegistry};
+        let body = format!("{}[]", " ".repeat(MAX_UPSTREAM_BYTES));
+        let router = axum::Router::new().route(
+            "/api/field",
+            axum::routing::get(move || async move { body }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let mut registry = TrustedKeyRegistry::new();
+        registry
+            .enroll_sensor_key("sensor", Signer::from_seed(&[42; 32]).public_hex())
+            .unwrap();
+        let mut processor = crate::live::LiveTrustConfig::production(registry)
+            .into_processor()
+            .unwrap();
+        let state = LiveState::new(format!("http://{address}"));
+        let (tx, mut rx) = broadcast::channel(1);
+        let mut tick = 0;
+        let accepted = poll_api_once(
+            &reqwest::Client::new(),
+            &format!("http://{address}/api/field"),
+            &state,
+            &tx,
+            &mut tick,
+            &mut processor,
+        )
+        .await;
+        server.abort();
+        assert!(!accepted);
+        assert_eq!(tick, 0);
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn sse_decoder_preserves_utf8_across_every_chunk_boundary() {
+        for separator in ["\n", "\r\n", "\r"] {
+            let input = format!("data: {{\"sensor\":\"café\"}}{separator}{separator}");
+            for split in 0..=input.len() {
+                let mut decoder = SseDecoder::default();
+                let mut output = decoder.push(&input.as_bytes()[..split]).unwrap();
+                output.extend(decoder.push(&input.as_bytes()[split..]).unwrap());
+                assert_eq!(output, vec!["{\"sensor\":\"café\"}"]);
+            }
+        }
+    }
+
+    #[test]
+    fn sse_decoder_bounds_unterminated_events() {
+        let mut decoder = SseDecoder::default();
+        assert!(decoder.push(&vec![b'x'; MAX_UPSTREAM_BYTES]).is_ok());
+        assert!(decoder.push(b"x").is_err());
+        let mut decoder = SseDecoder::default();
+        assert!(decoder.push(b"data: \xff\n\n").is_err());
+    }
+
+    #[test]
+    fn sse_data_preserves_significant_whitespace() {
+        assert_eq!(parse_sse_data("data:   value"), Some("  value".into()));
+    }
 
     #[test]
     fn synthetic_banner_is_always_synthetic() {

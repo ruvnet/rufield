@@ -1,0 +1,15 @@
+{
+  "name": "rufield-marketplace",
+  "owner": {
+    "name": "rUv",
+    "url": "https://github.com/ruvnet"
+  },
+  "plugins": [
+    {
+      "name": "rufield",
+      "source": "./plugins/rufield",
+      "description": "Run RuField demos, validate sensor replay, and audit evidence and privacy."
+    }
+  ],
+  "description": "RuField sensing demos, recording replay, and governed evidence validation."
+}

@@ -30,24 +30,30 @@ use rufield_viewer::{
 #[tokio::main]
 async fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        println!("rufield-viewer [--port N] [--seed N] [--tick-ms N] [--no-loop]\n  [--source synthetic|live] [--upstream URL] [--poll-ms N]\n  [--sensor-key sensor=hex] [--trust-mode production|captured_replay]\n  [--max-event-age-ms N] [--max-future-skew-ms N]");
+        return;
+    }
+    if let Err(error) = validate_args(&args) {
+        eprintln!("invalid arguments: {error}");
+        std::process::exit(2);
+    }
 
-    let port = arg_value(&args, "--port")
-        .or_else(|| std::env::var("RUFIELD_VIEWER_PORT").ok())
-        .and_then(|s| s.parse::<u16>().ok())
-        .unwrap_or(8088);
-    let seed = arg_value(&args, "--seed")
-        .or_else(|| std::env::var("RUFIELD_VIEWER_SEED").ok())
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_SEED);
-    let tick_ms = arg_value(&args, "--tick-ms")
-        .or_else(|| std::env::var("RUFIELD_VIEWER_TICK_MS").ok())
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_TICK_MS);
+    let port = number_or_exit(&args, "--port", "RUFIELD_VIEWER_PORT", 8088u16);
+    let seed = number_or_exit(&args, "--seed", "RUFIELD_VIEWER_SEED", DEFAULT_SEED);
+    let tick_ms = number_or_exit(
+        &args,
+        "--tick-ms",
+        "RUFIELD_VIEWER_TICK_MS",
+        DEFAULT_TICK_MS,
+    );
     let loop_stream = !args.iter().any(|a| a == "--no-loop");
-    let poll_ms = arg_value(&args, "--poll-ms")
-        .or_else(|| std::env::var("RUFIELD_VIEWER_POLL_MS").ok())
-        .and_then(|s| s.parse::<u64>().ok())
-        .unwrap_or(DEFAULT_POLL_MS);
+    let poll_ms = number_or_exit(
+        &args,
+        "--poll-ms",
+        "RUFIELD_VIEWER_POLL_MS",
+        DEFAULT_POLL_MS,
+    );
 
     // Source selector. Default stays SYNTHETIC.
     let source_sel = arg_value(&args, "--source")
@@ -234,4 +240,79 @@ fn duration_override_ns(
     milliseconds
         .checked_mul(1_000_000)
         .ok_or_else(|| format!("{flag} is too large"))
+}
+
+fn number_or_exit<T: std::str::FromStr>(args: &[String], flag: &str, env: &str, default: T) -> T {
+    match arg_value(args, flag).or_else(|| std::env::var(env).ok()) {
+        None => default,
+        Some(value) => match value.parse() {
+            Ok(number) => number,
+            Err(_) => {
+                eprintln!("{flag} / {env} requires a valid unsigned integer");
+                std::process::exit(2);
+            }
+        },
+    }
+}
+
+fn validate_args(args: &[String]) -> Result<(), String> {
+    let mut index = 0;
+    while index < args.len() {
+        let flag = args[index].as_str();
+        match flag {
+            "--no-loop" => index += 1,
+            "--port"
+            | "--seed"
+            | "--tick-ms"
+            | "--poll-ms"
+            | "--source"
+            | "--upstream"
+            | "--sensor-key"
+            | "--trust-mode"
+            | "--max-event-age-ms"
+            | "--max-future-skew-ms" => {
+                if args
+                    .get(index + 1)
+                    .is_none_or(|value| value.starts_with("--") || value.is_empty())
+                {
+                    return Err(format!("{flag} requires a value"));
+                }
+                index += 2;
+            }
+            _ => return Err(format!("unknown argument {flag:?}; use --help")),
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_misspelled_or_missing_source_selection() {
+        for args in [
+            vec!["--sorce", "live"],
+            vec!["--source"],
+            vec!["--source", "--no-loop"],
+        ] {
+            assert!(
+                validate_args(&args.into_iter().map(String::from).collect::<Vec<_>>()).is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn accepts_repeated_sensor_bindings() {
+        let args = [
+            "--source",
+            "live",
+            "--sensor-key",
+            "a=key",
+            "--sensor-key",
+            "b=key",
+            "--no-loop",
+        ];
+        assert!(validate_args(&args.into_iter().map(String::from).collect::<Vec<_>>()).is_ok());
+    }
 }

@@ -1,0 +1,10 @@
+{
+  "name": "rufield",
+  "version": "0.1.0",
+  "description": "RuField synthetic demos, CSI and ultrasonic replay checks, and trust and privacy conformance workflows.",
+  "author": {"name": "rUv", "url": "https://github.com/ruvnet"},
+  "homepage": "https://github.com/ruvnet/rufield",
+  "repository": "https://github.com/ruvnet/rufield",
+  "license": "MIT",
+  "keywords": ["sensing", "privacy", "provenance", "rust"]
+}

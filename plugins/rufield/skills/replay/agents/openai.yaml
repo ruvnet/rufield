@@ -1,0 +1,4 @@
+interface:
+  display_name: "RuField Replay"
+  short_description: "Validate CSI and ultrasonic replay with honest evidence"
+  default_prompt: "Validate RuField replay and explain its trust boundaries."

@@ -829,7 +829,7 @@ fn decode_fixed_hex<const N: usize>(value: &str) -> Result<[u8; N], ArtifactVeri
         ));
     }
     let mut output = [0u8; N];
-    for (index, chunk) in value.as_bytes().chunks_exact(2).enumerate() {
+    for (index, chunk) in value.as_bytes().as_chunks::<2>().0.iter().enumerate() {
         output[index] = (decode_nibble(chunk[0])? << 4) | decode_nibble(chunk[1])?;
     }
     Ok(output)

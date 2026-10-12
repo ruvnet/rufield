@@ -1,5 +1,7 @@
 # RuField MFS
 
+[![RuField animated sensing constellation](docs/assets/rufield-hero.svg)](#install--quickstart)
+
 **The open specification for camera-free field intelligence.**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/ruvnet/rufield/ci.yml?branch=main&label=CI)](https://github.com/ruvnet/rufield/actions)
@@ -44,19 +46,9 @@ sensors. Each modality has its own sampling, calibration, confidence, privacy,
 and provenance semantics — which makes reliable fusion hard and governance
 weak. RuField normalizes **every** modality into one common grammar:
 
-```text
-WiFi CSI            ┐
-WiFi CIR            │
-WiFi BFLD           │
-UWB                 │
-Bluetooth Sounding  │
-mmWave radar        ├─ all emit ─▶  RuField Field Event
-Ultrasonic          │               RuField Field Tensor
-Subsonic            │               RuField Fusion Graph
-Infrared            │               RuField Privacy Class
-Quantum magnetic    │               RuField Provenance Receipt
-Quantum inertial    ┘
-```
+![Adapters normalize events; trust and privacy policies govern fusion](docs/assets/rufield-pipeline.svg)
+
+The modality registry covers WiFi CSI/CIR/BFLD, UWB, Bluetooth, mmWave, ultrasound, subsonic, infrared and quantum sensors. A registry entry does not imply a live hardware adapter.
 
 RuField does **not** replace IEEE 802.11bf, Bluetooth Channel Sounding, UWB,
 Matter, or any radar protocol. It sits above them. It is the open,
@@ -90,6 +82,34 @@ cargo run -p rufield-bench            # default seed
 cargo run -p rufield-bench -- 2026    # custom seed
 cargo run -p rufield-bench -- 2026 --json   # JSON only
 ```
+
+## Claude Code plugin and skills
+
+Install the repository marketplace, then the plugin:
+
+```text
+/plugin marketplace add ruvnet/rufield
+/plugin install rufield@rufield-marketplace
+```
+
+| Skill | Use it for |
+|---|---|
+| `/rufield:demo` | Run the seeded synthetic benchmark and local dashboard. |
+| `/rufield:replay` | Validate captured CSI or ultrasonic replay and its fusion boundary. |
+| `/rufield:audit` | Check privacy, provenance, regression tests and evidence gates. |
+
+The plugin adds guided workflows, with no automatic hooks, credential changes or background servers. Keep a separate RuField source checkout for build and test commands. See the [plugin guide](plugins/rufield/README.md).
+
+### Verify this checkout end to end
+
+```bash
+python3 scripts/validate-plugin.py
+cargo build --locked -p rufield-bench -p rufield-viewer
+python3 scripts/verify-e2e.py
+sh harness/run-evidence-gate.sh
+```
+
+The executable smoke test checks repeatable benchmark results, privacy and provenance counters, HTTP endpoints and a complete SSE stream. It starts and stops its own loopback viewer process. Physical evidence promotion requires independently verified artifacts and is not implied by this smoke test.
 
 ## Dashboard / demo
 
@@ -369,6 +389,8 @@ the operator was pointing the phone, which is pose, and it rides in
 
 ## User guide
 
+![Synthetic, captured replay and production require different evidence](docs/assets/rufield-evidence.svg)
+
 ### Run the camera-free room-intelligence demo
 
 The `SyntheticSim` adapter walks the ADR-260 §19 sequence deterministically:
@@ -458,6 +480,8 @@ consent / identity gate. No hardware adapter has been built or validated in
 v0.1 — these are honest follow-ups, not shipped features.
 
 ## Privacy & provenance
+
+![Six privacy classes with policy-controlled public projection](docs/assets/rufield-privacy.svg)
 
 ### Privacy classes (ADR-260 §10)
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "RuField Demo"
+  short_description: "Run the deterministic synthetic field sensing demo"
+  default_prompt: "Run the RuField synthetic demo and report observed results."

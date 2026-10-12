@@ -3,3 +3,7 @@
 Cargo.lock.bak
 *.pdb
 .claude-flow/
+
+# Python validation helpers
+__pycache__/
+*.pyc

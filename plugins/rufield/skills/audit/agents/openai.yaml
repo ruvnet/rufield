@@ -1,0 +1,4 @@
+interface:
+  display_name: "RuField Audit"
+  short_description: "Check trust privacy and evidence promotion invariants"
+  default_prompt: "Audit RuField conformance without promoting synthetic evidence."

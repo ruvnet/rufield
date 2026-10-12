@@ -278,7 +278,10 @@ async fn events(
     Query(params): Query<RunParams>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     match (&st.config.source, st.live_tx.clone()) {
-        (SourceMode::Live { .. }, Some(tx)) => {
+        (SourceMode::Live { .. }, tx) => {
+            // A disconnected/test live router still emits live metadata, never
+            // the synthetic replay.
+            let tx = tx.unwrap_or_else(|| broadcast::channel(1).0);
             let stream: std::pin::Pin<
                 Box<dyn tokio_stream::Stream<Item = Result<Event, Infallible>> + Send>,
             > = Box::pin(live_event_stream(st.clone(), tx));
