@@ -562,3 +562,8 @@ Issues and PRs welcome. Keep crates pure-Rust and `cargo test --workspace`
 green; new adapters implement `FieldAdapter` and must respect the P0-edge-only
 privacy default. All benchmark numbers must remain honestly labelled SYNTHETIC
 until a real hardware adapter is validated.
+
+<!-- ruv-constellation:manifest -->
+## ruv constellation
+
+[manifest.ruv](manifest.ruv) describes this repository with source-pinned capability evidence. Explore the [ruvnet nexus](https://github.com/ruvnet/ruvnet/blob/main/docs/ruv-catalog.md) and [manifest contract](https://github.com/ruvnet/ruvnet/blob/main/docs/ruv-manifest.md). Declared integration roles are discovery metadata and do not grant execution authority or certify runtime behavior.
