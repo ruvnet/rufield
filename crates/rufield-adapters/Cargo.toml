@@ -1,8 +1,9 @@
 [package]
 name = "rufield-adapters"
 version.workspace = true
+readme = "README.md"
 edition.workspace = true
-description = "RuField MFS adapters: deterministic seeded SyntheticSim emitting the §19 camera-free room-intelligence demo across 3 modalities"
+description = "RuField bounded sensing adapters, W1700K RF diagnostics and advisory anomaly analysis"
 license.workspace = true
 authors.workspace = true
 repository.workspace = true

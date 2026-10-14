@@ -1,6 +1,7 @@
 [package]
 name = "rufield-provenance"
 version.workspace = true
+readme = "README.md"
 edition.workspace = true
 description = "RuField MFS provenance receipts: sha256 hashing + ed25519 sign/verify and the §11 fusability invariant"
 license.workspace = true

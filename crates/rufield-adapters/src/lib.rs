@@ -78,3 +78,6 @@ pub use ultrasonic::{
 
 /// Bounded W1700K advisory diagnostic replay, without IQ or occupancy.
 pub mod rf_spectrum_quality;
+
+/// Bounded advisory RF power changes and receiver quality analysis.
+pub mod rf_quality_analysis;

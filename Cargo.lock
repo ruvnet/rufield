@@ -896,7 +896,7 @@ dependencies = [
 
 [[package]]
 name = "rufield-adapters"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rufield-core",
  "rufield-fusion",
@@ -909,7 +909,7 @@ dependencies = [
 
 [[package]]
 name = "rufield-bench"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ed25519-dalek",
  "rufield-adapters",
@@ -924,7 +924,7 @@ dependencies = [
 
 [[package]]
 name = "rufield-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -932,7 +932,7 @@ dependencies = [
 
 [[package]]
 name = "rufield-fusion"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rufield-adapters",
  "rufield-core",
@@ -943,7 +943,7 @@ dependencies = [
 
 [[package]]
 name = "rufield-interop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rufield-core",
  "serde",
@@ -952,14 +952,14 @@ dependencies = [
 
 [[package]]
 name = "rufield-privacy"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rufield-core",
 ]
 
 [[package]]
 name = "rufield-provenance"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ed25519-dalek",
  "rufield-core",
@@ -970,7 +970,7 @@ dependencies = [
 
 [[package]]
 name = "rufield-ruvector"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rufield-core",
  "rufield-provenance",
@@ -981,14 +981,14 @@ dependencies = [
 
 [[package]]
 name = "rufield-uncertainty"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rufield-core",
 ]
 
 [[package]]
 name = "rufield-viewer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "futures-core",

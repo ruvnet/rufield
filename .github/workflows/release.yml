@@ -1,0 +1,38 @@
+name: Release
+on:
+  workflow_dispatch:
+env:
+  CARGO_BUILD_JOBS: 2
+permissions:
+  contents: read
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4
+        with:
+          toolchain: '1.90.0'
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ruvnet/RuView
+          ref: 285aea8f2de16f95564a08cb9982d3609162a967
+          path: .rf-e2e-ruview
+      - name: Validate
+        run: |
+          cargo test --workspace --locked
+          cargo build --workspace --all-targets --locked
+          python3 scripts/verify-e2e.py
+          python3 scripts/verify-rf-e2e.py --ruview .rf-e2e-ruview
+          python3 scripts/verify-rf-svg.py
+          python3 scripts/validate-plugin.py
+          cargo package --workspace --locked
+          python3 scripts/verify-release-packages.py target/package
+      - name: Publish workspace
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          test -n "$CARGO_REGISTRY_TOKEN" || { echo "CARGO_REGISTRY_TOKEN is required"; exit 1; }
+          cargo publish --workspace --locked

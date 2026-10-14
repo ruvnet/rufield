@@ -1,6 +1,7 @@
 [package]
 name = "rufield-core"
 version.workspace = true
+readme = "README.md"
 edition.workspace = true
 description = "RuField MFS v0.1 core data model: Field Event/Tensor/Privacy/Provenance types and traits (ADR-260 §7/§9/§16/§20)"
 license.workspace = true

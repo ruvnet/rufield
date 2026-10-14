@@ -39,6 +39,19 @@ jobs:
       - name: HTTP and SSE end-to-end smoke
         run: python3 scripts/verify-e2e.py
 
+      - name: Validate animated RF SVG
+        run: python3 scripts/verify-rf-svg.py
+
+      - name: Checkout pinned RuView RF producer
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ruvnet/RuView
+          ref: 285aea8f2de16f95564a08cb9982d3609162a967
+          path: .rf-e2e-ruview
+
+      - name: Synthetic RF cross-repository E2E
+        run: python3 scripts/verify-rf-e2e.py --ruview .rf-e2e-ruview
+
       - name: Test
         run: cargo test --workspace
 

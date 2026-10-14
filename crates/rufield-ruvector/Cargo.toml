@@ -1,6 +1,7 @@
 [package]
 name = "rufield-ruvector"
 version.workspace = true
+readme = "README.md"
 edition.workspace = true
 description = "Optional backend boundary between RuField FieldEncoder and RuVector embeddings"
 license.workspace = true

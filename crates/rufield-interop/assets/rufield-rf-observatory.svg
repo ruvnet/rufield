@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="460" viewBox="0 0 1100 460" role="img" aria-labelledby="title desc">
+<title id="title">RuField RF observatory: signals become advisory evidence</title>
+<desc id="desc">Conceptual animated diagram, not measured data. W1700K IQ becomes quality metrics, baseline anomaly analysis and advisory evidence. Missing or unverified observations remain unknown. No human presence is inferred.</desc>
+<defs>
+<linearGradient id="bg" x2="1" y2="1"><stop stop-color="#061824"/><stop offset="1" stop-color="#15132e"/></linearGradient>
+<linearGradient id="beam"><stop stop-color="#55edcb"/><stop offset="1" stop-color="#8d8cff"/></linearGradient>
+<linearGradient id="face" x2=".8" y2="1"><stop stop-color="#163744"/><stop offset="1" stop-color="#0a1524"/></linearGradient>
+<radialGradient id="aura"><stop stop-color="#33cbbd" stop-opacity=".18"/><stop offset="1" stop-color="#33cbbd" stop-opacity="0"/></radialGradient>
+<pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse"><path d="M34 0H0V34" fill="none" stroke="#385579" stroke-opacity=".19"/></pattern>
+<clipPath id="frame"><rect width="1100" height="460" rx="22"/></clipPath>
+</defs>
+<style>
+text{font-family:system-ui,-apple-system,Segoe UI,sans-serif;fill:#eff7ff}
+.muted{fill:#acc0d4}.mint{fill:#55edcb}.violet{fill:#b5aaff}.amber{fill:#ffd08b}
+.eyebrow{font-size:12px;letter-spacing:2px;font-weight:650}
+.label{font-size:19px;font-weight:650}.small{font-size:12px}
+.flow{stroke-dasharray:5 14;animation:flow 3s linear infinite}
+.signal{stroke-dasharray:360;animation:signal 5s ease-in-out infinite}
+.float{animation:float 6s ease-in-out infinite}.delay{animation-delay:-3s}
+.ring{animation:ring 4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+.scan{animation:scan 9s linear infinite}
+.blink{animation:blink 3s ease-in-out infinite}
+@keyframes flow{to{stroke-dashoffset:-114}}
+@keyframes signal{0%,100%{stroke-dashoffset:45;opacity:.55}50%{stroke-dashoffset:0;opacity:1}}
+@keyframes float{50%{transform:translateY(-7px)}}
+@keyframes ring{0%,100%{opacity:.25;transform:scale(.9)}50%{opacity:.8;transform:scale(1.08)}}
+@keyframes scan{from{transform:translateX(0)}to{transform:translateX(870px)}}
+@keyframes blink{50%{opacity:.4}}
+@media(prefers-reduced-motion:reduce){.flow,.signal,.float,.ring,.scan,.blink{animation:none!important}}
+</style>
+<g clip-path="url(#frame)">
+<rect width="1100" height="460" fill="url(#bg)"/>
+<rect width="1100" height="460" fill="url(#grid)"/>
+<ellipse cx="540" cy="230" rx="510" ry="240" fill="url(#aura)"/>
+<path d="M-60 350L550 90L1160 350M-60 390L550 130L1160 390M-60 430L550 170L1160 430" fill="none" stroke="#435879" opacity=".16"/>
+<text x="32" y="34" class="eyebrow mint">RUFIELD / RF OBSERVATORY</text>
+<text x="32" y="76" font-size="32" font-weight="650" letter-spacing="-1">Measure first. Interpret with limits.</text>
+<text x="32" y="101" font-size="14" class="muted">A bounded path from radio samples to explainable, advisory evidence.</text>
+<rect x="865" y="25" width="202" height="29" rx="14" fill="#202641" stroke="#555b84"/>
+<circle cx="881" cy="40" r="4" fill="#a89bff" class="blink"/>
+<text x="894" y="44" class="small violet">CONCEPTUAL ANIMATION</text>
+<path d="M155 229H952" stroke="#284857" stroke-width="4"/>
+<path d="M155 229H952" stroke="url(#beam)" stroke-width="3" class="flow"/>
+<g transform="translate(32 135)">
+<text x="0" y="0" class="eyebrow muted">01 / RECEIVE</text>
+<g class="float">
+<path d="M0 38L20 23H208L228 38V153L208 169H20L0 153Z" fill="#0a1825" stroke="#33566c"/>
+<path d="M0 38H208L228 23H20Z" fill="#1c3b49" stroke="#4c7888"/>
+<rect y="38" width="208" height="131" rx="5" fill="url(#face)" stroke="#42667b"/>
+<path d="M208 38L228 23V153L208 169Z" fill="#14243b" stroke="#42667b"/>
+<path d="M16 93H30L37 66L44 123L51 80L58 104L65 93H82L89 57L96 136L103 72L110 112L117 93H135L142 77L149 112L156 93H190" fill="none" stroke="#55edcb" stroke-width="2.5" class="signal"/>
+<text x="16" y="151" class="small mint">RAW IQ / LOCAL CONSUMER</text>
+</g><text x="0" y="203" class="label">W1700K stream</text><text x="0" y="225" class="small muted">Read only. Samples stay local.</text></g>
+<g transform="translate(296 135)">
+<text x="0" y="0" class="eyebrow muted">02 / QUALIFY</text>
+<g class="float delay">
+<path d="M0 38H208L228 23H20Z" fill="#1c3b49" stroke="#4c7888"/>
+<rect y="38" width="208" height="131" rx="5" fill="url(#face)" stroke="#42667b"/>
+<path d="M208 38L228 23V153L208 169Z" fill="#14243b" stroke="#42667b"/>
+<text x="16" y="65" class="small muted">RMS</text><text x="16" y="96" class="small muted">RAILS</text><text x="16" y="127" class="small muted">GAPS</text>
+<path d="M72 61H184M72 92H184M72 123H184" stroke="#314758" stroke-width="7" stroke-linecap="round"/>
+<path d="M72 61H156M72 92H101" stroke="#55edcb" stroke-width="7" stroke-linecap="round" class="blink"/>
+<path d="M72 123H137" stroke="#ffc479" stroke-width="7" stroke-linecap="round"/>
+<text x="16" y="151" class="small mint">QUALITY + PROVENANCE</text>
+</g><text x="0" y="203" class="label">Check the capture</text><text x="0" y="225" class="small muted">Gaps and stale data invalidate.</text></g>
+<g transform="translate(560 135)">
+<text x="0" y="0" class="eyebrow muted">03 / COMPARE</text>
+<g class="float">
+<path d="M0 38H208L228 23H20Z" fill="#292d58" stroke="#6a6b9a"/>
+<rect y="38" width="208" height="131" rx="5" fill="url(#face)" stroke="#64658e"/>
+<path d="M208 38L228 23V153L208 169Z" fill="#201f3e" stroke="#64658e"/>
+<rect x="16" y="79" width="176" height="34" rx="5" fill="#8d8cff" opacity=".13"/>
+<path d="M16 96H192" stroke="#8d8cff" stroke-dasharray="4 5"/>
+<path d="M16 98L35 93L54 101L73 95L92 98L111 61L130 98L149 92L168 100L192 96" fill="none" stroke="#b9aeff" stroke-width="2.5" class="signal"/>
+<circle cx="111" cy="61" r="11" fill="none" stroke="#b9aeff" class="ring"/>
+<text x="16" y="151" class="small violet">BASELINE / DEVIATION</text>
+</g><text x="0" y="203" class="label">Score the anomaly</text><text x="0" y="225" class="small muted">A change is not a human detection.</text></g>
+<g transform="translate(824 135)">
+<text x="0" y="0" class="eyebrow muted">04 / GOVERN</text>
+<g class="float delay">
+<path d="M0 38H208L228 23H20Z" fill="#292d58" stroke="#6a6b9a"/>
+<rect y="38" width="208" height="131" rx="5" fill="url(#face)" stroke="#64658e"/>
+<path d="M208 38L228 23V153L208 169Z" fill="#201f3e" stroke="#64658e"/>
+<rect x="16" y="56" width="176" height="35" rx="8" fill="#26333e" stroke="#d4ae6d"/>
+<circle cx="32" cy="73" r="4" fill="#ffd08b" class="blink"/>
+<text x="45" y="78" font-size="15" font-weight="700" class="amber">UNKNOWN</text>
+<rect x="16" y="102" width="176" height="35" rx="8" fill="#1e2745" stroke="#8d8cff"/>
+<text x="104" y="125" text-anchor="middle" font-size="15" font-weight="700" class="violet">ADVISORY ONLY</text>
+<text x="16" y="155" class="small muted">No presence inference</text>
+</g><text x="0" y="203" class="label">Keep the boundary</text><text x="0" y="225" class="small muted">Unverified evidence stays invalid.</text></g>
+<rect x="32" y="383" width="1036" height="51" rx="10" fill="#0a1624" stroke="#34435f"/>
+<text x="47" y="403" font-size="10" class="muted">OBSERVATION ORDER</text>
+<path d="M185 407H1045" stroke="#314858" stroke-width="2"/>
+<path d="M185 407H1045" stroke="url(#beam)" stroke-dasharray="2 28" stroke-width="5"/>
+<g class="scan"><path d="M185 396V418" stroke="#d1fff5" stroke-width="2"/><circle cx="185" cy="407" r="7" fill="#55edcb" opacity=".3"/></g>
+<circle cx="550" cy="407" r="5" fill="#ffc479"/><circle cx="823" cy="407" r="5" fill="#b9aeff"/>
+<text x="47" y="422" font-size="10" class="muted">ILLUSTRATIVE, NOT LIVE</text>
+<text x="32" y="452" font-size="10" class="muted">Local IQ → compact diagnostics → baseline anomaly → advisory evidence. Synthetic artwork; no measured performance claims.</text>
+</g><rect x=".5" y=".5" width="1099" height="459" rx="22" fill="none" stroke="#314864"/>
+</svg>

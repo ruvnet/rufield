@@ -581,3 +581,9 @@ separately from the adapter receipt timestamp. This does not yet suppress other
 sensors automatically and has not been validated on physical W1700K hardware.
 
 See [wire contract, privacy, trust and acceptance tests](docs/ADR-271-w1700k-rf-diagnostics.md).
+
+## RF diagnostics in 0.2.0
+
+![Animated RF diagnostics observatory](docs/assets/rufield-rf-observatory.svg)
+
+Bounded quality ingestion and advisory baseline analysis. Configuration is unverified; power changes do not identify interference causes or occupancy. See [release notes](docs/releases/0.2.0.md).
