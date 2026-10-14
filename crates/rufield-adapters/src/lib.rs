@@ -75,3 +75,6 @@ pub use ultrasonic::{
     DEFAULT_CALIBRATION_PINGS, MAX_DETECTIONS, MAX_LINE_BYTES, MAX_PINGS, MAX_PROFILE_BINS,
     MAX_RANGE_M, ULTRASONIC_SIGNER_SEED,
 };
+
+/// Bounded W1700K advisory diagnostic replay, without IQ or occupancy.
+pub mod rf_spectrum_quality;

@@ -288,6 +288,15 @@ impl RuFieldFusion {
     /// Ingest using an explicit wall-clock value. This is the deterministic
     /// entry point for production tests and replay orchestration.
     pub fn ingest_at(&mut self, event: FieldEvent, now_ns: u64) -> Result<(), FusionError> {
+        // Diagnostics never enter spatial fusion, even after trusted signing.
+        if event.tensor.modality == Modality::RfSpectrumQuality
+            || event.sensor.modality == "rf_spectrum_quality"
+        {
+            return Err(FusionError::InvalidEvidence {
+                event_id: event.event_id.clone(),
+                reason: "RF diagnostics are not spatial evidence".into(),
+            });
+        }
         let event_id = event.event_id.clone();
         let mode = self.trust.mode();
         if let Err(reason) = self.trust.verify_and_record_at(&event, now_ns) {
