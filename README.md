@@ -562,3 +562,28 @@ Issues and PRs welcome. Keep crates pure-Rust and `cargo test --workspace`
 green; new adapters implement `FieldAdapter` and must respect the P0-edge-only
 privacy default. All benchmark numbers must remain honestly labelled SYNTHETIC
 until a real hardware adapter is validated.
+
+## W1700K RF diagnostics
+
+The [W1700K SDR](https://github.com/h0m3us3r/w1700k-sdr) companion bridge
+can feed bounded advisory JSONL records into RuField:
+
+```sh
+cargo run -p rufield-adapters --bin rf-diagnostics-replay \
+  < diagnostics.jsonl > diagnostic-events.jsonl
+```
+
+Output is unsigned P1 receiver quality metadata in modality 18, with no raw IQ,
+CSI, presence, pose or calibrated power claims. All v1 records remain invalid
+for promotion because radio configuration is unverified. Spatial fusion rejects
+this modality even for synthetic inputs. Source monotonic time is preserved
+separately from the adapter receipt timestamp. This does not yet suppress other
+sensors automatically and has not been validated on physical W1700K hardware.
+
+See [wire contract, privacy, trust and acceptance tests](docs/ADR-271-w1700k-rf-diagnostics.md).
+
+## RF diagnostics in 0.2.0
+
+![Animated RF diagnostics observatory](docs/assets/rufield-rf-observatory.svg)
+
+Bounded quality ingestion and advisory baseline analysis. Configuration is unverified; power changes do not identify interference causes or occupancy. See [release notes](docs/releases/0.2.0.md).

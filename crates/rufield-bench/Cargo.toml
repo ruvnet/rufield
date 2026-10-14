@@ -1,6 +1,7 @@
 [package]
 name = "rufield-bench"
 version.workspace = true
+readme = "README.md"
 edition.workspace = true
 description = "RuField MFS deterministic benchmark runner: F1 per task (SYNTHETIC), p95 latency, provenance coverage, privacy violations (ADR-260 §18/§27/§31)"
 license.workspace = true

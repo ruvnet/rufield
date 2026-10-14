@@ -7,3 +7,5 @@ Cargo.lock.bak
 # Python validation helpers
 __pycache__/
 *.pyc
+
+.rf-e2e-ruview/

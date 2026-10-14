@@ -47,6 +47,8 @@ pub enum Modality {
     /// Carries a calibrated electric-field vector rather than a scalar power
     /// reading, so it is distinct from every RSSI-style modality above.
     QuantumRf,
+    /// 18 — RF diagnostics only; never spatial or occupancy evidence.
+    RfSpectrumQuality,
 }
 
 impl Modality {
@@ -71,6 +73,7 @@ impl Modality {
             Modality::SyntheticSim => 15,
             Modality::BleAdvertisementRssi => 16,
             Modality::QuantumRf => 17,
+            Modality::RfSpectrumQuality => 18,
         }
     }
 
@@ -95,12 +98,13 @@ impl Modality {
             Modality::SyntheticSim => "synthetic_sim",
             Modality::BleAdvertisementRssi => "ble_advertisement_rssi",
             Modality::QuantumRf => "quantum_rf",
+            Modality::RfSpectrumQuality => "rf_spectrum_quality",
         }
     }
 
-    /// All 16 modalities in registry order.
+    /// All 18 modalities in registry order.
     #[must_use]
-    pub fn all() -> [Modality; 17] {
+    pub fn all() -> [Modality; 18] {
         [
             Modality::WifiCsi,
             Modality::WifiCir,
@@ -119,6 +123,7 @@ impl Modality {
             Modality::SyntheticSim,
             Modality::BleAdvertisementRssi,
             Modality::QuantumRf,
+            Modality::RfSpectrumQuality,
         ]
     }
 }
@@ -164,14 +169,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn modality_has_17_variants() {
-        assert_eq!(Modality::all().len(), 17);
+    fn modality_has_18_variants() {
+        assert_eq!(Modality::all().len(), 18);
     }
 
     #[test]
-    fn modality_codes_are_1_to_17_unique() {
+    fn modality_codes_are_1_to_18_unique() {
         let codes: Vec<u8> = Modality::all().iter().map(|m| m.code()).collect();
-        assert_eq!(codes, (1..=17).collect::<Vec<u8>>());
+        assert_eq!(codes, (1..=18).collect::<Vec<u8>>());
     }
 
     /// Wire codes are a published contract, so the two most recent additions

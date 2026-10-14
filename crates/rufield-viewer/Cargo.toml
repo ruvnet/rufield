@@ -1,6 +1,7 @@
 [package]
 name = "rufield-viewer"
 version.workspace = true
+readme = "README.md"
 edition.workspace = true
 description = "RuField MFS read-only web dashboard: drives the SyntheticSim → fusion pipeline and streams live camera-free room intelligence (ADR-260 §14 Layer 7 / §27.9)"
 license.workspace = true

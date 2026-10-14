@@ -1,6 +1,7 @@
 [package]
 name = "rufield-fusion"
 version.workspace = true
+readme = "README.md"
 edition.workspace = true
 description = "RuField MFS fusion graph + engine: TOML rules, weighted-Bayes / temporal-window inference, confidence decay (ADR-260 §12/§13/§24)"
 license.workspace = true
