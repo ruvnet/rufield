@@ -2,7 +2,7 @@
 
 Deterministic CloudEvents and SOSA projections for RuField events.
 
-![RuField RF observatory: unverified diagnostics remain advisory](https://raw.githubusercontent.com/ruvnet/rufield/main/docs/assets/rufield-rf-observatory.svg)
+![RuField RF observatory: unverified diagnostics remain advisory](https://raw.githubusercontent.com/ruvnet/rufield/025af0e02ad04124b07d371d447fd87d33d21b4e/docs/assets/rufield-rf-observatory.svg)
 
 ```sh
 cargo add rufield-interop@0.2.0

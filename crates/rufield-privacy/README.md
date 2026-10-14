@@ -2,7 +2,7 @@
 
 RuField MFS privacy policy + PrivacyGuard: P0..P5 classes, default policy, consent and identity gating (ADR-260 §10).
 
-![RuField RF observatory: unverified diagnostics remain advisory](https://raw.githubusercontent.com/ruvnet/rufield/main/docs/assets/rufield-rf-observatory.svg)
+![RuField RF observatory: unverified diagnostics remain advisory](https://raw.githubusercontent.com/ruvnet/rufield/025af0e02ad04124b07d371d447fd87d33d21b4e/docs/assets/rufield-rf-observatory.svg)
 
 ```sh
 cargo add rufield-privacy@0.2.0
